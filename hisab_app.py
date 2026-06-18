@@ -5,8 +5,9 @@ import sqlite3
 import hashlib
 from datetime import datetime
 
-# --- DATABASE CONFIG ---
-DB_FILE = "system_database.db"
+# --- NEW STABLE DATABASE CONFIG ---
+# Database file ka naam badal diya hai taaki purani crashed file se connection toot jaye
+DB_FILE = "ledger_production_v1.db"
 
 # --- SQLITE CORE DATABASE OPERATIONS ---
 def init_db():
@@ -15,16 +16,9 @@ def init_db():
     # Users Table
     c.execute('''CREATE TABLE IF NOT EXISTS users 
                  (username TEXT PRIMARY KEY, password TEXT, account_mode TEXT, created_by TEXT)''')
-    # Transactions Table
+    # Transactions Table with permanent log_status tracking
     c.execute('''CREATE TABLE IF NOT EXISTS transactions 
                  (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT, date TEXT, type TEXT, category TEXT, amount REAL, log_status TEXT)''')
-    
-    # Auto-Patch for log_status column check
-    try:
-        c.execute("ALTER TABLE transactions ADD COLUMN log_status TEXT DEFAULT 'Auto'")
-    except sqlite3.OperationalError:
-        pass
-        
     conn.commit()
     conn.close()
 
@@ -129,7 +123,7 @@ def get_global_summary_for_admin(admin_username):
     exp = df[df["type"] == "Expense"]["amount"].sum()
     return inc, exp, (inc - exp)
 
-# Start Database Safely
+# Start Fresh Secure Database
 init_db()
 
 # --- STREAMLIT UI ---
@@ -258,7 +252,7 @@ st.sidebar.markdown("**📝 Log New Entry**")
 with st.sidebar.form("entry_form", clear_on_submit=True):
     date_input = st.date_input("Transaction Date", datetime.now())
     type_input = st.selectbox("Type", ["Expense", "Income"])
-    category_input = st.text_input("Category / Particulars", value="") # Kept perfectly clean and empty
+    category_input = st.text_input("Category / Particulars", value="") 
     amount_input = st.number_input("Amount (INR)", min_value=1.0, step=1.0)
     submit_btn = st.form_submit_button("COMMIT TRANSACTION", use_container_width=True)
 
