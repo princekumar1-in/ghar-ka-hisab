@@ -5,7 +5,7 @@ import sqlite3
 import hashlib
 from datetime import datetime
 
-# --- DATABASE SETUP (For Multi-Accounts) ---
+# --- DATABASE SETUP ---
 DB_FILE = "users_db.db"
 DATA_FOLDER = "User_Data"
 
@@ -50,92 +50,89 @@ def login_user(username, password):
         return check_hashes(password, data[0])
     return False
 
-# Initialize Database
 init_db()
 
-st.set_page_config(page_title="Prince Hisab-Kitab Pro", layout="wide")
+# --- PAGE CONFIG ---
+st.set_page_config(page_title="Personal Ledger Pro", layout="wide", page_icon="💰")
 
-# --- SESSION STATE INITIALIZATION ---
 if "logged_in" not in st.session_state:
     st.session_state["logged_in"] = False
 if "username" not in st.session_state:
     st.session_state["username"] = ""
 
-# --- LOGIN / REGISTER UI ---
+# --- AUTHENTICATION UI ---
 if not st.session_state["logged_in"]:
-    st.title("🔒 PRINCE HISAB-KITAB SECURED SYSTEM")
+    st.title("🔒 SECURED LEDGER SYSTEM")
     st.markdown("---")
     
-    # Login aur Register ke liye do tabs banaye hain
-    choice = st.radio("Option Chunein:", ["Login (Pehle se Account hai)", "Register (Naya Account Banayein)"], horizontal=True)
+    auth_choice = st.radio("Select Action:", ["Sign In", "Create Account"], horizontal=True)
     
-    col1, col2 = st.columns([1, 2])
+    col1, _ = st.columns([1, 2])
     
     with col1:
-        if choice == "Login (Pehle se Account hai)":
-            st.subheader("🔑 LOGIN")
-            username = st.text_input("Username / Apna Naam:")
+        if auth_choice == "Sign In":
+            st.subheader("🔑 Sign In")
+            username = st.text_input("Username:").strip()
             password = st.text_input("Password:", type="password")
-            if st.button("LOGIN"):
+            if st.button("SIGN IN", use_container_width=True):
                 if login_user(username, password):
                     st.session_state["logged_in"] = True
                     st.session_state["username"] = username
-                    st.success(f"Welcome back, {username}! 👋")
+                    st.toast(f"Welcome back! 👋")
                     st.rerun()
                 else:
-                    st.error("❌ Galat Username ya Password!")
+                    st.error("Invalid Username or Password")
                     
-        elif choice == "Register (Naya Account Banayein)":
-            st.subheader("📝 CREATE ACCOUNT")
-            new_user = st.text_input("Naya Username Chunein:")
-            new_password = st.text_input("Naya Password Banayein:", type="password")
-            confirm_password = st.text_input("Password Dobara Dalein:", type="password")
+        elif auth_choice == "Create Account":
+            st.subheader("📝 Register New Account")
+            new_user = st.text_input("Choose Username:").strip()
+            new_password = st.text_input("Create Password:", type="password")
+            confirm_password = st.text_input("Confirm Password:", type="password")
             
-            if st.button("REGISTER NOW"):
-                if not new_user.strip() or not new_password.strip():
-                    st.error("⚠️ Username aur Password khaali nahi ho sakta!")
+            if st.button("REGISTER NOW", use_container_width=True):
+                if not new_user or not new_password:
+                    st.error("Fields cannot be empty!")
                 elif new_password != confirm_password:
-                    st.error("❌ Dono Passwords match nahi kar rahe!")
+                    st.error("Passwords do not match!")
                 else:
-                    success = add_user(new_user.strip(), new_password)
-                    if success:
-                        st.success("🎉 Account kamyabi se ban gaya! Ab upar 'Login' option select karke login karein.")
+                    if add_user(new_user, new_password):
+                        st.success("Account created successfully! Please switch to 'Sign In' tab.")
                     else:
-                        st.error("⚠️ Ye Username pehle se kisi ne le rakha hai! Kuch naya try karein.")
+                        st.error("Username already exists! Choose another.")
                         
-    st.stop() # Login hone tak aage ka code nahi chalega
+    st.stop()
 
-# --- MAIN DASHBOARD (Sahi Login ke Baad) ---
+# --- MAIN APP LOGIC ---
 current_user = st.session_state["username"]
-st.title(f"🏠 PRINCE GHAR KA HISAB-KITAB ({current_user.upper()})")
+st.title(f"📊 FINANCIAL DASHBOARD")
 
-# Har user ki apni alag CSV file banegi
-USER_DATA_FILE = os.path.join(DATA_FOLDER, f"hisab_{current_user}.csv")
+USER_DATA_FILE = os.path.join(DATA_FOLDER, f"ledger_{current_user}.csv")
 
 if not os.path.exists(USER_DATA_FILE):
     df = pd.DataFrame(columns=["Date", "Type", "Category", "Amount"])
     df.to_csv(USER_DATA_FILE, index=False)
 
-# --- DATA ENTRY FORM (SIDEBAR) ---
-st.sidebar.header(f"👤 Account: {current_user}")
+# --- SIDEBAR: ENTRY FORM ---
+st.sidebar.subheader(f"👤 Active User: {current_user.title()}")
 with st.sidebar.form("entry_form", clear_on_submit=True):
-    date_input = st.date_input("Tarikh Chunein", datetime.now())
-    type_input = st.selectbox("Type", ["Expense (Kharcha)", "Income (Kamai)"])
-    category_input = st.text_input("Category / Kharch ya Kamai ka Naam", placeholder="e.g., Diesel, Narma Kamai, Kirana")
-    amount_input = st.number_input("Amount (Rupees)", min_value=1, step=1)
-    submit_btn = st.form_submit_button("SAVE HISAB")
+    date_input = st.date_input("Transaction Date", datetime.now())
+    type_input = st.selectbox("Transaction Type", ["Expense", "Income"])
+    category_input = st.text_input("Category / Particulars", placeholder="e.g., Fuel, Market, Seeds")
+    amount_input = st.number_input("Amount (INR)", min_value=1, step=1)
+    submit_btn = st.form_submit_button("SAVE TRANSACTION", use_container_width=True)
 
 if submit_btn:
-    if category_input.strip() == "":
-        st.sidebar.error("⚠️ Kripya Category ka naam zaroor likhein!")
+    if not category_input.strip():
+        st.sidebar.error("Please enter a valid category name!")
     else:
         clean_category = category_input.strip().title()
         new_data = pd.DataFrame([[date_input, type_input, clean_category, amount_input]], 
                                 columns=["Date", "Type", "Category", "Amount"])
         new_data.to_csv(USER_DATA_FILE, mode='a', header=False, index=False)
-        st.success(f"'{clean_category}' ka hisab save ho gaya! 🚀")
+        st.toast(f"Saved: {clean_category} - ₹{amount_input}", icon="✅")
+        st.rerun()
 
-# --- DATA PROCESSING & DASHBOARD ---
+# --- MAIN DASHBOARD DATA ---
 df_load = pd.read_csv(USER_DATA_FILE)
 
 if not df_load.empty:
@@ -143,41 +140,46 @@ if not df_load.empty:
     df_load["Month"] = df_load["Date"].dt.strftime('%B %Y')
     
     all_months = df_load["Month"].unique()
-    selected_month = st.selectbox("📅 Mahina Chunein:", all_months)
+    selected_month = st.selectbox("📅 Select Billing Month:", all_months)
     
-    df_filtered = df_load[df_load["Month"] == selected_month]
+    df_filtered = df_load[df_load["Month"] == selected_month].copy()
     
-    inc = df_filtered[df_filtered["Type"] == "Income (Kamai)"]["Amount"].sum()
-    exp = df_filtered[df_filtered["Type"] == "Expense (Kharcha)"]["Amount"].sum()
-    bal = inc - exp
+    # Calculations
+    total_income = df_filtered[df_filtered["Type"] == "Income"]["Amount"].sum()
+    total_expense = df_filtered[df_filtered["Type"] == "Expense"]["Amount"].sum()
+    net_balance = total_income - total_expense
     
-    # Dashboard Cards
+    # --- METRIC CARDS ---
     col1, col2, col3 = st.columns(3)
-    col1.metric("🟩 KUL KAMAI (INCOME)", f"₹{inc:,}")
-    col2.metric("🟥 KUL KHARCHA (EXPENSE)", f"₹{exp:,}")
-    col3.metric("🟦 NET BALANCE (SAVINGS)", f"₹{bal:,}")
+    col1.metric("🟩 TOTAL INCOME", f"₹{total_income:,}")
+    col2.metric("🟥 TOTAL EXPENSE", f"₹{total_expense:,}")
+    col3.metric("🟦 NET SAVINGS", f"₹{net_balance:,}")
     
     st.markdown("---")
     
+    # --- DATA TABLES & CHARTS ---
     col_left, col_right = st.columns(2)
+    
     with col_left:
-        st.subheader("📊 Is Mahine ka Len-Den")
-        st.dataframe(df_filtered[["Date", "Type", "Category", "Amount"]].sort_values(by="Date", ascending=False), use_container_width=True)
+        st.subheader("📝 Monthly Statements")
+        df_display = df_filtered[["Date", "Type", "Category", "Amount"]].copy()
+        df_display["Date"] = df_display["Date"].dt.strftime('%Y-%m-%d')
+        st.dataframe(df_display.sort_values(by="Date", ascending=False), use_container_width=True, hide_index=True)
         
     with col_right:
-        st.subheader("🍕 Kharchon ka Hisab")
-        exp_df = df_filtered[df_filtered["Type"] == "Expense (Kharcha)"]
+        st.subheader("🍩 Expense Distribution")
+        exp_df = df_filtered[df_filtered["Type"] == "Expense"]
         if not exp_df.empty:
-            cat_totals = exp_df.groupby("Category")["Amount"].sum()
-            st.pie_chart(cat_totals)
+            cat_totals = exp_df.groupby("Category")["Amount"].sum().reset_index()
+            st.bar_chart(data=cat_totals, x="Category", y="Amount", color="#ff4b4b", use_container_width=True)
         else:
-            st.info("Is mahine koi kharcha nahi hai.")
+            st.info("No expenses recorded for this month.")
 else:
-    st.info("Abhi koi data nahi hai. Sidebar se entry karein!")
+    st.info("No historical data available. Use the sidebar menu to log your first transaction.")
 
 # --- LOGOUT BUTTON ---
-if st.sidebar.button("🔒 LOGOUT"):
+st.sidebar.markdown("---")
+if st.sidebar.button("🔒 SECURE LOGOUT", use_container_width=True):
     st.session_state["logged_in"] = False
     st.session_state["username"] = ""
     st.rerun()
-    
