@@ -128,12 +128,23 @@ init_db_safely()
 # --- STREAMLIT UI ---
 st.set_page_config(page_title="Professional Ledger System", layout="wide", page_icon="💰")
 
-if "logged_in" not in st.session_state:
-    st.session_state["logged_in"] = False
-if "username" not in st.session_state:
-    st.session_state["username"] = ""
-if "account_mode" not in st.session_state:
-    st.session_state["account_mode"] = "Single"
+# --- CUSTOM CSS ---
+st.markdown("""
+    <style>
+    #MainMenu {visibility: hidden;}
+    footer {visibility: hidden;}
+    header {visibility: hidden;}
+    stDecoration {display:none !important;}
+    [data-testid="stStatusWidget"] {display:none !important;}
+    button[title="View source code"] {display: none !important;}
+    .stAppDeployDropdown {display: none !important;}
+    iframe[title="Manage app"] {display: none !important;}
+    div[data-testid="stConnectionStatus"] {display: none !important;}
+    </style>
+    """, unsafe_allow_html=True)
+
+# Apni Gmail ID yahan dakhil karein
+MY_EMAIL = "vermaji3216@gmail.com"
 
 if not st.session_state["logged_in"]:
     st.title("🔒 SECURED LEDGER SYSTEM")
@@ -191,6 +202,14 @@ if not st.session_state["logged_in"]:
                         st.success("Password recovered! Switch to 'Sign In'.")
                     else:
                         st.error("Username does not exist.")
+    
+    # --- LOGIN PAGE EMAIL SUPPORT ---
+    st.markdown("---")
+    with st.expander("📧 Need Help / Report Problem?"):
+        st.markdown("**Facing issues with your ledger system? Contact Support:**")
+        email_url = f"mailto:{MY_EMAIL}?subject=Ledger%20App%20Support%20Request"
+        st.link_button("📧 Send Email Support", email_url, use_container_width=True, type="secondary")
+        
     st.stop()
 
 # --- MAIN SYSTEM ---
@@ -277,7 +296,6 @@ if user_mode == "Multiple":
     g_col3.metric("📈 NET NETWORK VALUE", f"₹{g_bal:,}")
     st.markdown("---")
 
-# --- DYNAMIC TARGET VIEW SELECTION FOR ADMIN ---
 view_target_user = current_user
 is_viewing_self = True
 
@@ -325,7 +343,6 @@ if not df_user.empty:
             **Amount:** `₹{row['amount']:,}`
             """)
             
-            # Agar khud ki entry hai toh hi Edit/Delete dikhega
             if is_viewing_self:
                 edit_col, delete_col = st.columns(2)
                 
@@ -370,7 +387,14 @@ if not df_user.empty:
         else:
             st.info("No localized expenses found for this selection frame.")
 else:
-    st.info("No dynamic records locked inside this private node yet.")
+    st.info("No dynamic records locked inside your private node yet.")
+
+# --- SIDEBAR EMAIL SUPPORT ---
+st.sidebar.markdown("---")
+with st.sidebar.expander("📧 Help & Support"):
+    st.markdown("<small>Facing issues? Contact Support:</small>", unsafe_allow_html=True)
+    email_url = f"mailto:{MY_EMAIL}?subject=Ledger%20Internal%20Support"
+    st.link_button("📧 Email Support Desk", email_url, use_container_width=True)
 
 # --- LOGOUT ---
 st.sidebar.markdown("---")
