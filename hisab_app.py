@@ -220,6 +220,7 @@ with st.sidebar.expander("⚙️ Account Settings"):
         st.session_state["username"] = ""
         st.rerun()
 
+member_list = []
 if user_mode == "Multiple":
     st.sidebar.markdown("---")
     st.sidebar.markdown("**👥 Manage Family Accounts**")
@@ -231,6 +232,7 @@ if user_mode == "Multiple":
             if sub_name and sub_pass:
                 if add_user(sub_name, sub_pass, "Single", current_user):
                     st.success(f"Account for '{sub_name}' active!")
+                    st.rerun()
                 else:
                     st.error("Member name already exists.")
                     
@@ -266,8 +268,6 @@ if submit_btn:
         st.rerun()
 
 # --- RENDER DATA VISUALIZATIONS ---
-df_user = get_user_transactions(current_user)
-
 if user_mode == "Multiple":
     st.subheader("🌐 Consolidated Family Network Balance (Admin Summary view)")
     g_inc, g_exp, g_bal = get_global_summary_for_admin(current_user)
@@ -277,13 +277,28 @@ if user_mode == "Multiple":
     g_col3.metric("📈 NET NETWORK VALUE", f"₹{g_bal:,}")
     st.markdown("---")
 
-st.subheader("👤 Your Personal Secure Ledger Dashboard")
+# --- DYNAMIC TARGET VIEW SELECTION FOR ADMIN ---
+view_target_user = current_user
+is_viewing_self = True
+
+if user_mode == "Multiple" and member_list:
+    st.subheader("🔍 Select Account View")
+    options = ["My Entries Only"] + [m.upper() for m in member_list]
+    selected_view = st.selectbox("Choose whose dashboard to view:", options)
+    
+    if selected_view != "My Entries Only":
+        view_target_user = selected_view.lower()
+        is_viewing_self = False
+
+df_user = get_user_transactions(view_target_user)
+
+st.subheader(f"👤 Ledger Dashboard: {view_target_user.upper()}")
 if not df_user.empty:
     df_user["date"] = pd.to_datetime(df_user["date"])
     df_user["Month"] = df_user["date"].dt.strftime('%B %Y')
     
     all_months = df_user["Month"].unique()
-    selected_month = st.selectbox("Select Display Billing Month:", all_months)
+    selected_month = st.selectbox("Select Display Billing Month:", all_months, key=f"month_{view_target_user}")
     
     df_filtered = df_user[df_user["Month"] == selected_month].copy()
     
@@ -292,9 +307,9 @@ if not df_user.empty:
     my_bal = my_inc - my_exp
     
     col1, col2, col3 = st.columns(3)
-    col1.metric("🟩 YOUR INCOME", f"₹{my_inc:,}")
-    col2.metric("🟥 YOUR EXPENSE", f"₹{my_exp:,}")
-    col3.metric("🟦 YOUR NET BALANCE", f"₹{my_bal:,}")
+    col1.metric("🟩 INCOME", f"₹{my_inc:,}")
+    col2.metric("🟥 EXPENSE", f"₹{my_exp:,}")
+    col3.metric("🟦 NET BALANCE", f"₹{my_bal:,}")
     
     st.markdown("---")
     
@@ -305,43 +320,44 @@ if not df_user.empty:
         for index, row in df_filtered.sort_values(by="date", ascending=False).iterrows():
             tag_color = "🟢" if row['log_status'] == "Auto" else "🟠"
             
-            # Mobile Clean UI Row Display
             st.markdown(f"""
             **📅 {row['date'].strftime('%Y-%m-%d')}** | {tag_color} *[{row['log_status']}]* **Category:** {row['category']} ({row['type']})  
             **Amount:** `₹{row['amount']:,}`
             """)
             
-            # Simple Clean Buttons Side-by-Side
-            edit_col, delete_col = st.columns(2)
-            
-            with edit_col:
-                if st.button("✏️ Edit", key=f"btn_ed_{row['id']}", use_container_width=True):
-                    st.session_state[f"show_edit_{row['id']}"] = True
-            
-            with delete_col:
-                if st.button("🗑️ Delete", key=f"btn_del_{row['id']}", type="primary", use_container_width=True):
-                    delete_transaction(row['id'])
-                    st.toast("Entry wiped out!")
-                    st.rerun()
-            
-            # Modal/Pop-up System for Editing when clicked
-            if f"show_edit_{row['id']}" in st.session_state and st.session_state[f"show_edit_{row['id']}"]:
-                with st.expander("🛠️ Update Entry Data", expanded=True):
-                    edit_cat = st.text_input("New Category Name:", value=row['category'], key=f"in_cat_{row['id']}")
-                    edit_amt = st.number_input("New Amount (INR):", value=float(row['amount']), key=f"in_amt_{row['id']}")
-                    edit_type = st.selectbox("New Type:", ["Expense", "Income"], index=0 if row['type'] == "Expense" else 1, key=f"in_type_{row['id']}")
-                    
-                    save_col, cancel_col = st.columns(2)
-                    with save_col:
-                        if st.button("Save Changes", key=f"save_ed_{row['id']}", use_container_width=True):
-                            update_transaction(row['id'], row['date'].strftime('%Y-%m-%d'), edit_type, edit_cat.title(), edit_amt, "Edited")
-                            st.session_state[f"show_edit_{row['id']}"] = False
-                            st.toast("Modified Safely!")
-                            st.rerun()
-                    with cancel_col:
-                        if st.button("Cancel", key=f"cancel_ed_{row['id']}", use_container_width=True):
-                            st.session_state[f"show_edit_{row['id']}"] = False
-                            st.rerun()
+            # Agar khud ki entry hai toh hi Edit/Delete dikhega
+            if is_viewing_self:
+                edit_col, delete_col = st.columns(2)
+                
+                with edit_col:
+                    if st.button("✏️ Edit", key=f"btn_ed_{row['id']}", use_container_width=True):
+                        st.session_state[f"show_edit_{row['id']}"] = True
+                
+                with delete_col:
+                    if st.button("🗑️ Delete", key=f"btn_del_{row['id']}", type="primary", use_container_width=True):
+                        delete_transaction(row['id'])
+                        st.toast("Entry wiped out!")
+                        st.rerun()
+                
+                if f"show_edit_{row['id']}" in st.session_state and st.session_state[f"show_edit_{row['id']}"]:
+                    with st.expander("🛠️ Update Entry Data", expanded=True):
+                        edit_cat = st.text_input("New Category Name:", value=row['category'], key=f"in_cat_{row['id']}")
+                        edit_amt = st.number_input("New Amount (INR):", value=float(row['amount']), key=f"in_amt_{row['id']}")
+                        edit_type = st.selectbox("New Type:", ["Expense", "Income"], index=0 if row['type'] == "Expense" else 1, key=f"in_type_{row['id']}")
+                        
+                        save_col, cancel_col = st.columns(2)
+                        with save_col:
+                            if st.button("Save Changes", key=f"save_ed_{row['id']}", use_container_width=True):
+                                update_transaction(row['id'], row['date'].strftime('%Y-%m-%d'), edit_type, edit_cat.title(), edit_amt, "Edited")
+                                st.session_state[f"show_edit_{row['id']}"] = False
+                                st.toast("Modified Safely!")
+                                st.rerun()
+                        with cancel_col:
+                            if st.button("Cancel", key=f"cancel_ed_{row['id']}", use_container_width=True):
+                                st.session_state[f"show_edit_{row['id']}"] = False
+                                st.rerun()
+            else:
+                st.markdown("<span style='color: #888; font-size: 0.85em;'>🔒 Member Entry (Read-Only Mode)</span>", unsafe_allow_html=True)
                             
             st.markdown("<hr style='margin:1em 0px; border-color:#444;' />", unsafe_allow_html=True)
                 
@@ -354,7 +370,7 @@ if not df_user.empty:
         else:
             st.info("No localized expenses found for this selection frame.")
 else:
-    st.info("No dynamic records locked inside your private node yet.")
+    st.info("No dynamic records locked inside this private node yet.")
 
 # --- LOGOUT ---
 st.sidebar.markdown("---")
