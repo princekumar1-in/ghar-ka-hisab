@@ -2,38 +2,48 @@ import streamlit as st
 import pandas as pd
 from datetime import datetime
 
-# 1. Page Config & Strongest CSS (Streamlit Branding aur Icons ko permanent gayab karne ke liye)
+# 1. Page Config & High-Level CSS (Streamlit Logos aur Trash UI ko jad se saaf karne ke liye)
 st.set_page_config(
     page_title="Financial Ledger Architecture", 
     layout="wide", 
     initial_sidebar_state="expanded"
 )
 
-# Ultra-strict CSS script to eliminate the bottom right icons, headers, and deploy banners
-hide_everything_style = """
+# Ultimate CSS override to destroy the bottom right red crown and purple block completely
+absolute_hide_css = """
     <style>
     #MainMenu {visibility: hidden;}
     footer {visibility: hidden;}
     header {visibility: hidden;}
     .stDeployButton {display:none !important;}
     div[data-testid="stStatusWidget"] {visibility: hidden !important;}
-    footer:after {content:''; display:none !important;}
+    
+    /* Strict override for bottom logos */
+    footer, div[data-testid="stDecoration"], .st-emotion-cache-1pxn4b9, .st-emotion-cache-12galv2 {
+        display: none !important;
+        visibility: hidden !important;
+    }
+    img[src*="streamlit"], div[class*="viewerBadge"] {
+        display: none !important;
+    }
+    
+    /* Fixing the spacing and sidebar background */
+    [data-testid="stSidebar"] {
+        background-color: #11151c;
+    }
     [data-testid="stSidebarCollapseButton"] {
         background-color: #1e222b;
         color: white;
     }
-    /* Hiding the streamlit footer watermark completely */
-    span div img {display: none !important;}
-    iframe {display: none !important;}
     </style>
 """
-st.markdown(hide_everything_style, unsafe_allow_html=True)
+st.markdown(absolute_hide_css, unsafe_allow_html=True)
 
-# 2. Permanent In-Memory Database Simulation
+# 2. Database & State Simulation
 if "users_db" not in st.session_state:
     st.session_state.users_db = {
-        "PRINCE": {"password": "adminpassword", "role": "Admin"},
-        "JAYRAM": {"password": "123", "role": "User"}
+        "PRINCE": {"password": "adminpassword", "role": "Admin", "type": "Multiple"},
+        "JAYRAM": {"password": "123", "role": "User", "type": "Single"}
     }
 
 if "ledger_entries" not in st.session_state:
@@ -45,11 +55,10 @@ if "logged_in_user" not in st.session_state:
 if "user_role" not in st.session_state:
     st.session_state.user_role = None
 
-# --- AUTHENTICATION INTERFACE (LOGIN / REGISTER / FORGOT PASSWORD) ---
+# --- AUTHENTICATION SCREEN ---
 if st.session_state.logged_in_user is None:
     st.title(" FINANCIAL LEDGER ARCHITECTURE")
     
-    # Login aur Registration ko handle karne ke liye simple Toggle Button
     auth_mode = st.radio("Choose Action:", ["Sign In", "Create New Account / Register"], horizontal=True)
     st.markdown("---")
 
@@ -67,11 +76,11 @@ if st.session_state.logged_in_user is None:
                 else:
                     st.error("🔒 Invalid Password. Please try again.")
             else:
-                st.error(f"👤 User '{username_input}' not found. Toggle above to register a new account!")
+                st.error(f"👤 User '{username_input}' not found. Choose 'Create New Account' above.")
         
-        # Forgot Password Option
+        # Forgot Password
         with st.expander("🔑 Forgot Password?"):
-            forgot_user = st.text_input("Enter your Username to recover:", key="forgot_u").strip()
+            forgot_user = st.text_input("Enter your Username to recover:", key="recover_u").strip()
             if st.button("Recover Password", use_container_width=True):
                 if forgot_user in st.session_state.users_db:
                     recovered_pass = st.session_state.users_db[forgot_user]["password"]
@@ -85,25 +94,33 @@ if st.session_state.logged_in_user is None:
         new_password = st.text_input("Choose Password", type="password")
         confirm_password = st.text_input("Confirm Password", type="password")
         
+        # Wapas Add kiya gaya aapka layout selection option
+        account_type = st.radio("Account Type Chunein:", ["Single User Account", "Multiple Accounts (Family/Admin)"])
+        
         if st.button("REGISTER & CREATE ACCOUNT", use_container_width=True):
             if not new_username or not new_password:
                 st.error("Fields cannot be empty!")
             elif new_username in st.session_state.users_db:
-                st.error("This username already exists. Choose a different one.")
+                st.error("This username already exists. Choose another one.")
             elif new_password != confirm_password:
                 st.error("Passwords do not match!")
             else:
-                # Naya User humesha default 'User' role ke sath register hoga
-                st.session_state.users_db[new_username] = {"password": new_password, "role": "User"}
-                st.success(f"🎉 Account successfully created for '{new_username}'! Now switch to 'Sign In' tab above to log in.")
+                # Role allocation based on selected account type
+                role = "Admin" if account_type == "Multiple Accounts (Family/Admin)" else "User"
+                st.session_state.users_db[new_username] = {
+                    "password": new_password, 
+                    "role": role,
+                    "type": "Multiple" if "Multiple" in account_type else "Single"
+                }
+                st.success(f"🎉 Account '{new_username}' created as {role}! Switch to 'Sign In' to log in.")
 
-# --- MAIN CONTROLLER SYSTEM (AFTER SUCCESSFUL LOGIN) ---
+# --- MAIN APPLICATION WORKSPACE ---
 else:
     current_user = st.session_state.logged_in_user
     user_role = st.session_state.user_role
 
     # ==========================================
-    # SIDEBAR CONTROL PANEL
+    # SIDEBAR CONTROLLER SYSTEM
     # ==========================================
     with st.sidebar:
         st.markdown("### 👤 Dashboard Controller")
@@ -118,7 +135,7 @@ else:
 
         st.markdown("---")
 
-        # Admin exclusive management tools
+        # Admin Features (Only visible to admin accounts)
         if user_role == "Admin":
             st.markdown("### 👥 Manage Family Accounts")
             
@@ -127,7 +144,7 @@ else:
                 mem_password = st.text_input("Member Password:", type="password", key="add_p")
                 if st.button("Create Member Account", use_container_width=True):
                     if mem_username and mem_password:
-                        st.session_state.users_db[mem_username] = {"password": mem_password, "role": "User"}
+                        st.session_state.users_db[mem_username] = {"password": mem_password, "role": "User", "type": "Single"}
                         st.success(f"Account '{mem_username}' Created!")
                         st.rerun()
             
@@ -140,7 +157,7 @@ else:
             
             st.markdown("---")
 
-        # Universal Entry Form (Sabhhi users ke liye available)
+        # Universal Form Layout (Available for PRINCE, JAYRAM, and new users)
         st.markdown("### 📝 Log New Entry")
         
         entry_date = st.date_input("Transaction Date", datetime.now())
@@ -165,8 +182,11 @@ else:
 
         st.markdown("---")
         
+        # Wapas Add kiya gaya Aapka Help & Support System Expandable
         with st.expander("ℹ️ Help & Support"):
-            st.write("Financial Ledger System v2.5. Contact Admin for core database assistance.")
+            st.write("**Architecture Panel v3.0**")
+            st.write("• Secure Network Ledger Activated.")
+            st.write("• Contact Admin (Prince) for configuration backups.")
 
         st.markdown("---")
         if st.button("🔒 SECURE SIGN OUT", use_container_width=True):
@@ -175,13 +195,13 @@ else:
             st.rerun()
 
     # ==========================================
-    # WORKSPACE / DASHBOARD MONITOR
+    # CENTRAL DISPLAY INTERFACE
     # ==========================================
     st.title("📊 FINANCIAL LEDGER ARCHITECTURE")
     st.caption(f"Secure Session Active: **{current_user}**")
     st.markdown("---")
 
-    # Math calculations for total balance sheets
+    # Metrics calculation logic
     df_entries = pd.DataFrame(st.session_state.ledger_entries)
     
     total_rev = 0.0
@@ -192,7 +212,7 @@ else:
     
     net_bal = total_rev - total_exp
 
-    # Dashboard Metrics Viewports
+    # Main Dashboard Statistics Screen
     st.markdown("### 🌐 Consolidated Family Network Balance (Account Summary view)")
     m_col1, m_col2, m_col3 = st.columns(3)
     with m_col1:
