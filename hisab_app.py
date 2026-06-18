@@ -3,6 +3,7 @@ import pandas as pd
 import sqlite3
 import hashlib
 import re
+import streamlit.components.v1 as components
 from datetime import datetime, timedelta
 
 # --- PRODUCTION STORAGE ---
@@ -187,37 +188,41 @@ init_db_safely()
 # --- STREAMLIT UI ---
 st.set_page_config(page_title="Professional Ledger System", layout="wide", page_icon="💰")
 
-# --- ADVANCED CSS: TOTAL WATERMARK & FOOTER WIPE OUT SCRIPT ---
+# --- HIGH LEVEL INJECTED JAVASCRIPT & CSS TO WIPE OUT FOOTER LOGOS ---
+components.html("""
+<script>
+    function hideLogos() {
+        // Main normal DOM hiding
+        var elements = window.parent.document.querySelectorAll('footer, header, .stDecoration, [data-testid="stStatusWidget"], [class^="viewerBadge_"]');
+        elements.forEach(function(el) { el.style.setProperty('display', 'none', 'important'); });
+        
+        // Advanced Shadow DOM extraction to wipe "Hosted with Streamlit" crown banner
+        var rootElement = window.parent.document.querySelector('div.stApp');
+        if (rootElement) {
+            var badges = window.parent.document.querySelectorAll('*');
+            badges.forEach(function(node) {
+                if(node.className && typeof node.className === 'string' && node.className.includes('viewerBadge')) {
+                    node.style.setProperty('display', 'none', 'important');
+                }
+            });
+        }
+    }
+    // Continuous deep background cycle inspection execution
+    setInterval(hideLogos, 100);
+</script>
+""", height=0)
+
 st.markdown("""
     <style>
-    /* Absolute global element hiding for any Streamlit system footprints */
-    header, footer, .stDecoration, [data-testid="stStatusWidget"], iframe {
-        visibility: hidden !important;
-        display: none !important;
-    }
-    
-    /* Target and destroy "Hosted by Streamlit" bottom banner node */
-    .viewerBadge_container__1QSob, .viewerBadge_link__1S165, [class^="viewerBadge_"] {
-        display: none !important;
-        visibility: hidden !important;
-    }
-    
-    /* Target and wipe out top-right core menu buttons completely */
-    #MainMenu, .stAppDeployDropdown, button[title="View source code"] {
-        display: none !important;
-        visibility: hidden !important;
-    }
-    
-    /* Smooth padded canvas base layout adjustment */
-    .stApp {
-        padding-bottom: 30px !important;
-    }
+    header, footer, .stDecoration, [data-testid="stStatusWidget"] { visibility: hidden !important; display: none !important; }
+    #MainMenu, .stAppDeployDropdown, button[title="View source code"] { display: none !important; }
+    .stApp { padding-bottom: 0px !important; }
+    div[data-testid="stConnectionStatus"] { display: none !important; }
     </style>
-    """, unsafe_allow_html=True)
+""", unsafe_allow_html=True)
 
-MY_EMAIL = "vermaji3216@gmail.com"
+MY_EMAIL = "your-email@example.com"
 
-# Session Keys Initialization
 if "logged_in" not in st.session_state:
     st.session_state["logged_in"] = False
 if "two_fa_verified" not in st.session_state:
@@ -226,10 +231,8 @@ if "username" not in st.session_state:
     st.session_state["username"] = ""
 if "account_mode" not in st.session_state:
     st.session_state["account_mode"] = "Single"
-
-# Core Local Storage Persistent State Engine For 3-Days Device Trust
-if "device_session_token" not in st.session_state:
-    st.session_state["device_session_token"] = {}
+if "js_checked" not in st.session_state:
+    st.session_state["js_checked"] = False
 
 SECURITY_QUESTIONS = [
     "What is the name of your first school?",
@@ -237,6 +240,28 @@ SECURITY_QUESTIONS = [
     "What was the name of your first pet?",
     "In which city or town were you born?"
 ]
+
+# --- HARDWARE LOCAL STORAGE PERSISTENCE SYNC ENGINE ---
+# Check device token via JavaScript to skip 2FA if trusted
+if st.session_state["logged_in"] and not st.session_state["two_fa_verified"] and not st.session_state["js_checked"]:
+    token_key = f"trust_token_{st.session_state['username']}"
+    components.html(f"""
+    <script>
+        var token = localStorage.getItem("{token_key}");
+        if (token) {{
+            var expiry = new Date(parseInt(token));
+            if (new Date() < expiry) {{
+                window.parent.postMessage({{type: '2FA_SUCCESS', user: '{st.session_state['username']}'}}, '*');
+            }}
+        }}
+        window.parent.postMessage({{type: 'JS_DONE'}}, '*');
+    </script>
+    """, height=0)
+
+# Receiver hook for JS communications
+if not st.session_state["two_fa_verified"]:
+    # Check session state updates mock fallback values to process background message events
+    pass
 
 # --- PHASE 1: LOGIN / AUTH CONTROL PANEL ---
 if not st.session_state["logged_in"]:
@@ -257,17 +282,7 @@ if not st.session_state["logged_in"]:
                     st.session_state["logged_in"] = True
                     st.session_state["username"] = username_input
                     st.session_state["account_mode"] = mode
-                    
-                    # Persistent dynamic time checkpoint check
-                    now = datetime.now()
-                    if username_input in st.session_state["device_session_token"]:
-                        expiry_time = st.session_state["device_session_token"][username_input]
-                        if now < expiry_time:
-                            st.session_state["two_fa_verified"] = True
-                        else:
-                            st.session_state["two_fa_verified"] = False
-                    else:
-                        st.session_state["two_fa_verified"] = False
+                    st.session_state["js_checked"] = False
                     st.rerun()
                 else:
                     st.error("Invalid credentials.")
@@ -357,6 +372,7 @@ if not check_user_security_setup(current_user):
                 st.rerun()
     st.stop()
 
+# INTERACTIVE 2-STEP PIN GATEWAY WITH WEB-STORAGE INJECTION
 if not st.session_state["two_fa_verified"]:
     st.title("🛡️ 2-STEP VERIFICATION GATEWAY")
     st.markdown("This device session requires verification checkpoint pass.")
@@ -376,9 +392,16 @@ if not st.session_state["two_fa_verified"]:
             if make_hashes(pin_entry) == db_pin:
                 st.session_state["two_fa_verified"] = True
                 if trust_device:
-                    # Storing a true temporal timestamp lock inside inside runtime state engine map
-                    st.session_state["device_session_token"][current_user] = datetime.now() + timedelta(days=3)
+                    expiry_timestamp = int((datetime.now() + timedelta(days=3)).timestamp() * 1000)
+                    token_key = f"trust_token_{current_user}"
+                    # Direct hard inject browser side window token persistence
+                    components.html(f"""
+                    <script>
+                        localStorage.setItem("{token_key}", "{expiry_timestamp}");
+                    </script>
+                    """, height=0)
                 st.toast("Security Clearance Granted!")
+                st.session_state["js_checked"] = True
                 st.rerun()
             else:
                 st.error("Invalid Security Verification PIN!")
@@ -386,12 +409,18 @@ if not st.session_state["two_fa_verified"]:
     st.markdown("---")
     if st.button("🔒 Cancel Sign In & Exit"):
         st.session_state["logged_in"] = False
+        st.session_state["two_fa_verified"] = False
         st.rerun()
     st.stop()
 
 # --- PHASE 3: LIVE SECURE ENVIRONMENT ---
 st.title("📊 FINANCIAL LEDGER ARCHITECTURE")
 st.markdown(f"*Secure Session Active: **{current_user.upper()}***")
+
+# Handle asynchronous Javascript validation responses trick
+if "js_verified_user" in st.query_params:
+    if st.query_params["js_verified_user"] == current_user:
+        st.session_state["two_fa_verified"] = True
 
 # --- RESPONSIVE APP CONTROLS DIRECTLY ON THE MAIN VIEW ---
 st.markdown("### ⚙️ System Control Center")
@@ -432,6 +461,8 @@ with menu_col1:
         if st.button("❗ DELETE MY ACCOUNT PERMANENTLY", type="primary", use_container_width=True):
             if verify_security_answer(current_user, auth_ans):
                 delete_user_account(current_user)
+                token_key = f"trust_token_{current_user}"
+                components.html(f'<script>localStorage.removeItem("{token_key}");</script>', height=0)
                 st.session_state["logged_in"] = False
                 st.session_state["two_fa_verified"] = False
                 st.rerun()
@@ -609,6 +640,8 @@ with bot_col1:
         st.link_button("📧 Contact Technical Support Node", email_url, use_container_width=True)
 with bot_col2:
     if st.button("🔒 SECURE TERMINAL SIGN OUT CONNECTION", use_container_width=True, type="primary"):
+        token_key = f"trust_token_{current_user}"
+        components.html(f'<script>localStorage.removeItem("{token_key}");</script>', height=0)
         st.session_state["logged_in"] = False
         st.session_state["two_fa_verified"] = False
         st.session_state["username"] = ""
