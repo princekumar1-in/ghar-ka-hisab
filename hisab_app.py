@@ -293,6 +293,9 @@ if not st.session_state["logged_in"]:
                             update_user_password(reset_user, new_reset_pass)
                             st.success("Password changed! Switch to 'Sign In'.")
                         else: st.error("Incorrect answer!")
+            elif reset_user:
+                st.error("Username not found.")
+                
     st.markdown("---")
     with st.expander("📧 Need Help / Report Problem?"):
         email_url = f"mailto:{MY_EMAIL}?subject=Ledger%20App%20Support%20Request"
@@ -477,12 +480,13 @@ if not df_user.empty:
     with col_left:
         st.subheader("📝 Live Statement Ledger Records")
         for index, row in df_filtered.sort_values(by="date", ascending=False).iterrows():
-            tag_color = "🟢" if row['type'] == "Income" else "🟥"
+            # Color Tagging & Text Update as requested
+            tag_color = "🟩 [Income]" if row['type'] == "Income" else "🟥 [Expense]"
             method_label = "🏪 Cash" if row['payment_method'] == "Cash" else "🏦 Bank"
             entry_note = row['notes'] if row['notes'] else "No description."
             
-            # Note configuration directly inline using a clean small expander icon setup
-            with st.expander(f"📅 {row['date'].strftime('%Y-%m-%d')} | {tag_color} **{row['category']}** | Mode: `{method_label}` | **₹{row['amount']:,}**"):
+            # Expanded text strictly adjusted for dynamic status tags [Auto]/[Edited] & Type
+            with st.expander(f"📅 {row['date'].strftime('%Y-%m-%d')} | {tag_color} | **{row['category']}** | {method_label} | **₹{row['amount']:,}** | *[{row['log_status']}]*"):
                 st.markdown(f"**📝 Notes:** *{entry_note}*")
                 
                 if is_viewing_self:
@@ -514,6 +518,7 @@ if not df_user.empty:
                         with cancel_col:
                             if st.button("Drop Token", key=f"cancel_ed_{row['id']}", use_container_width=True):
                                 st.session_state[f"show_edit_{row['id']}"] = False
+                                r_btn = st.button("Refresh View")
                                 st.rerun()
                 else:
                     st.markdown("<span style='color: #888; font-size: 0.85em;'>🔒 Member Entry (Read-Only Mode)</span>", unsafe_allow_html=True)
