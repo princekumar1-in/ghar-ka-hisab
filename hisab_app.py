@@ -187,7 +187,7 @@ init_db_safely()
 # --- STREAMLIT UI ---
 st.set_page_config(page_title="Professional Ledger System", layout="wide", page_icon="💰")
 
-# --- CUSTOM CSS ---
+# --- FORCE HIDE LOGOS & FOOTERS WITH EXTRA PADDING FOR CUSTOM BROWSER INTERFACES ---
 st.markdown("""
     <style>
     #MainMenu {visibility: hidden;}
@@ -199,6 +199,11 @@ st.markdown("""
     .stAppDeployDropdown {display: none !important;}
     iframe[title="Manage app"] {display: none !important;}
     div[data-testid="stConnectionStatus"] {display: none !important;}
+    
+    /* Extra spacing at the bottom to prevent overlaps on custom browsers */
+    .stApp {
+        padding-bottom: 80px !important;
+    }
     </style>
     """, unsafe_allow_html=True)
 
@@ -369,93 +374,98 @@ if not st.session_state["two_fa_verified"]:
 st.title("📊 FINANCIAL LEDGER ARCHITECTURE")
 st.markdown(f"*Secure Session Active: **{current_user.upper()}***")
 
-st.sidebar.subheader("👤 Dashboard Controller")
+# --- RESPONSIVE APP CONTROLS DIRECTLY ON THE MAIN VIEW (FOR EASY MOBILE ACCESS) ---
+st.markdown("### ⚙️ System Control Center")
+menu_col1, menu_col2 = st.columns(2)
 
-with st.sidebar.expander("⚙️ Account Settings"):
-    st.markdown("**Security Authentication**")
-    auth_ans = st.text_input("Verify Secret Answer First:", type="password", key="sett_ans_check")
-    
-    st.markdown("---")
-    st.markdown("**Modify Credentials**")
-    settings_new_pass = st.text_input("New Strong Password:", type="password", key="settings_p")
-    if st.button("Update Password", use_container_width=True):
-        is_strong, pass_msg = is_password_strong(settings_new_pass)
-        if not verify_security_answer(current_user, auth_ans):
-            st.error("Incorrect Answer!")
-        elif not is_strong:
-            st.error(pass_msg)
-        else:
-            update_user_password(current_user, settings_new_pass)
-            st.success("Password updated!")
-            
-    st.markdown("---")
-    st.markdown("**Modify 2-Step Code**")
-    settings_new_2fa = st.text_input("New 2-Step PIN:", type="password", max_chars=6, key="settings_2fa")
-    if st.button("Update PIN", use_container_width=True):
-        if not verify_security_answer(current_user, auth_ans):
-            st.error("Incorrect Answer!")
-        elif not settings_new_2fa.isdigit() or len(settings_new_2fa) < 4:
-            st.error("Provide a valid numeric pin structure.")
-        else:
-            update_user_2fa(current_user, settings_new_2fa)
-            st.success("PIN updated!")
+with menu_col1:
+    with st.expander("👤 Account Profile Settings"):
+        st.markdown("**Security Authentication Verification**")
+        auth_ans = st.text_input("Verify Secret Answer First:", type="password", key="sett_ans_check")
+        
+        st.markdown("---")
+        st.markdown("**Update System Password**")
+        settings_new_pass = st.text_input("New Strong Password:", type="password", key="settings_p")
+        if st.button("Commit New Password", use_container_width=True):
+            is_strong, pass_msg = is_password_strong(settings_new_pass)
+            if not verify_security_answer(current_user, auth_ans):
+                st.error("Incorrect Answer!")
+            elif not is_strong:
+                st.error(pass_msg)
+            else:
+                update_user_password(current_user, settings_new_pass)
+                st.success("Password updated successfully!")
+                
+        st.markdown("---")
+        st.markdown("**Update 2-Step Configuration**")
+        settings_new_2fa = st.text_input("New 2-Step PIN:", type="password", max_chars=6, key="settings_2fa")
+        if st.button("Commit New PIN", use_container_width=True):
+            if not verify_security_answer(current_user, auth_ans):
+                st.error("Incorrect Answer!")
+            elif not settings_new_2fa.isdigit() or len(settings_new_2fa) < 4:
+                st.error("Provide a valid numeric pin.")
+            else:
+                update_user_2fa(current_user, settings_new_2fa)
+                st.success("PIN updated successfully!")
 
-    st.markdown("---")
-    st.markdown("**Danger Zone**")
-    if st.button("❗ DELETE MY ACCOUNT PERMANENTLY", type="primary", use_container_width=True):
-        if verify_security_answer(current_user, auth_ans):
-            delete_user_account(current_user)
-            st.session_state["logged_in"] = False
-            st.session_state["two_fa_verified"] = False
-            st.rerun()
-        else:
-            st.error("Answer mismatch!")
+        st.markdown("---")
+        st.markdown("**Danger Zone Area**")
+        if st.button("❗ DELETE MY ACCOUNT PERMANENTLY", type="primary", use_container_width=True):
+            if verify_security_answer(current_user, auth_ans):
+                delete_user_account(current_user)
+                st.session_state["logged_in"] = False
+                st.session_state["two_fa_verified"] = False
+                st.rerun()
+            else:
+                st.error("Answer verification checkpoint failed!")
 
 member_list = []
-# FIX: user_mode ko database se direct verify kiya taaki har naye Admin ko access mile
-if user_mode == "Multiple":
-    st.sidebar.markdown("---")
-    st.sidebar.markdown("**👥 Manage Family Accounts**")
-    
-    with st.sidebar.expander("➕ Add Family Member"):
-        sub_name = st.text_input("Member Username:").strip().lower()
-        sub_pass = st.text_input("Member Password:", type="password")
-        
-        if st.button("Create Member Account"):
-            is_strong, pass_msg = is_password_strong(sub_pass)
-            if sub_name and sub_pass:
-                if not is_strong:
-                    st.error(pass_msg)
-                elif add_user(sub_name, sub_pass, "Single", current_user):
-                    st.success("Member active!")
-                    st.rerun()
+with menu_col2:
+    if user_mode == "Multiple":
+        with st.expander("👥 Family Account Registry"):
+            sub_name = st.text_input("Member Username:", key="sub_name_reg").strip().lower()
+            sub_pass = st.text_input("Member Password:", type="password", key="sub_pass_reg")
+            
+            if st.button("Deploy Member Node", use_container_width=True):
+                is_strong, pass_msg = is_password_strong(sub_pass)
+                if sub_name and sub_pass:
+                    if not is_strong:
+                        st.error(pass_msg)
+                    elif add_user(sub_name, sub_pass, "Single", current_user):
+                        st.success("Member account activated!")
+                        st.rerun()
+                    else:
+                        st.error("Username already registered.")
                 else:
-                    st.error("Username already exists.")
-            else:
-                st.error("Fields cannot be empty!")
-                    
-    member_list = get_sub_accounts(current_user)
-    if member_list:
-        with st.sidebar.expander("🗑️ Delete Member Account"):
-            to_delete = st.selectbox("Select Account:", member_list)
-            if st.button("CONFIRM DELETE ACCOUNT", type="primary"):
-                delete_user_account(to_delete)
-                st.success("Account wiped out!")
-                st.rerun()
+                    st.error("Input values are required!")
+                        
+        member_list = get_sub_accounts(current_user)
+        if member_list:
+            with st.expander("🗑️ Terminate Family Node"):
+                to_delete = st.selectbox("Select Account To Wipe:", member_list)
+                if st.button("CONFIRM NODE WIPEOUT", type="primary", use_container_width=True):
+                    delete_user_account(to_delete)
+                    st.success("Account database wiped out!")
+                    st.rerun()
 
-# --- ENTRY FORM ---
-st.sidebar.markdown("---")
-st.sidebar.markdown("**📝 Log New Entry**")
-with st.sidebar.form("entry_form", clear_on_submit=True):
-    date_input = st.date_input("Transaction Date", datetime.now())
-    type_input = st.selectbox("Type", ["Expense", "Income"])
-    category_input = st.text_input("Category / Particulars", value="") 
-    amount_input = st.number_input("Amount (INR)", min_value=1.0, step=1.0)
-    submit_btn = st.form_submit_button("COMMIT TRANSACTION", use_container_width=True)
+st.markdown("---")
+
+# --- TRANSACTION TRANSACTION ENTRY FORM RIGHT ON MAIN ENV ---
+st.markdown("### 📝 Log New Transaction Entry")
+with st.form("entry_form", clear_on_submit=True):
+    f_col1, f_col2 = st.columns(2)
+    with f_col1:
+        date_input = st.date_input("Transaction Sowing Date", datetime.now())
+        type_input = st.selectbox("Accounting Type Designation", ["Expense", "Income"])
+    with f_col2:
+        category_input = st.text_input("Category / Particulars Label", value="") 
+        amount_input = st.number_input("Transaction Volume Amount (INR)", min_value=1.0, step=1.0)
+        
+    submit_btn = st.form_submit_button("COMMIT SECURE TRANSACTION RECORD", use_container_width=True)
 
 if submit_btn:
     if not category_input.strip():
-        st.sidebar.error("Valid label required.")
+        st.error("Valid label designation required.")
     else:
         today_str = datetime.now().strftime('%Y-%m-%d')
         selected_date_str = date_input.strftime('%Y-%m-%d')
@@ -465,9 +475,11 @@ if submit_btn:
         st.toast(f"Logged permanently as [{status_tag}]!", icon="✅")
         st.rerun()
 
+st.markdown("---")
+
 # --- RENDER DATA VISUALIZATIONS ---
 if user_mode == "Multiple":
-    st.subheader("🌐 Consolidated Family Network Balance (Admin Summary view)")
+    st.markdown("### 🌐 Consolidated Network Matrix Balance")
     g_inc, g_exp, g_bal = get_global_summary_for_admin(current_user)
     g_col1, g_col2, g_col3 = st.columns(3)
     g_col1.metric("🌍 TOTAL COMBINED REVENUE", f"₹{g_inc:,}")
@@ -479,23 +491,23 @@ view_target_user = current_user
 is_viewing_self = True
 
 if user_mode == "Multiple" and member_list:
-    st.subheader("🔍 Select Account View")
-    options = ["My Entries Only"] + [m.upper() for m in member_list]
-    selected_view = st.selectbox("Choose whose dashboard to view:", options)
+    st.markdown("### 🔍 Select Dynamic Matrix Node View")
+    options = ["My Personal Entries Only"] + [m.upper() for m in member_list]
+    selected_view = st.selectbox("Choose view target parameters:", options)
     
-    if selected_view != "My Entries Only":
+    if selected_view != "My Personal Entries Only":
         view_target_user = selected_view.lower()
         is_viewing_self = False
 
 df_user = get_user_transactions(view_target_user)
 
-st.subheader(f"👤 Ledger Dashboard: {view_target_user.upper()}")
+st.markdown(f"### 👤 Active Target Node Dashboard: **{view_target_user.upper()}**")
 if not df_user.empty:
     df_user["date"] = pd.to_datetime(df_user["date"])
     df_user["Month"] = df_user["date"].dt.strftime('%B %Y')
     
     all_months = df_user["Month"].unique()
-    selected_month = st.selectbox("Select Display Billing Month:", all_months, key=f"month_{view_target_user}")
+    selected_month = st.selectbox("Select Display Billing Month Selector:", all_months, key=f"month_{view_target_user}")
     
     df_filtered = df_user[df_user["Month"] == selected_month].copy()
     
@@ -504,16 +516,16 @@ if not df_user.empty:
     my_bal = my_inc - my_exp
     
     col1, col2, col3 = st.columns(3)
-    col1.metric("🟩 INCOME", f"₹{my_inc:,}")
-    col2.metric("🟥 EXPENSE", f"₹{my_exp:,}")
-    col3.metric("🟦 NET BALANCE", f"₹{my_bal:,}")
+    col1.metric("🟩 REVENUE STREAM", f"₹{my_inc:,}")
+    col2.metric("🟥 OUTFLOW DRAIN", f"₹{my_exp:,}")
+    col3.metric("🟦 NET BALANCED NODE", f"₹{my_bal:,}")
     
     st.markdown("---")
     
     col_left, col_right = st.columns(2)
     
     with col_left:
-        st.subheader("📝 Live Statement Ledger")
+        st.subheader("📝 Live Statement Ledger Records")
         for index, row in df_filtered.sort_values(by="date", ascending=False).iterrows():
             tag_color = "🟢" if row['log_status'] == "Auto" else "🟠"
             
@@ -526,30 +538,30 @@ if not df_user.empty:
                 edit_col, delete_col = st.columns(2)
                 
                 with edit_col:
-                    if st.button("✏️ Edit", key=f"btn_ed_{row['id']}", use_container_width=True):
+                    if st.button("✏️ Edit Record Token", key=f"btn_ed_{row['id']}", use_container_width=True):
                         st.session_state[f"show_edit_{row['id']}"] = True
                 
                 with delete_col:
-                    if st.button("🗑️ Delete", key=f"btn_del_{row['id']}", type="primary", use_container_width=True):
+                    if st.button("🗑️ Delete Record Token", key=f"btn_del_{row['id']}", type="primary", use_container_width=True):
                         delete_transaction(row['id'])
                         st.toast("Entry wiped out!")
                         st.rerun()
                 
                 if f"show_edit_{row['id']}" in st.session_state and st.session_state[f"show_edit_{row['id']}"]:
-                    with st.expander("🛠️ Update Entry Data", expanded=True):
+                    with st.expander("🛠️ Update Target Node Metrics", expanded=True):
                         edit_cat = st.text_input("New Category Name:", value=row['category'], key=f"in_cat_{row['id']}")
                         edit_amt = st.number_input("New Amount (INR):", value=float(row['amount']), key=f"in_amt_{row['id']}")
                         edit_type = st.selectbox("New Type:", ["Expense", "Income"], index=0 if row['type'] == "Expense" else 1, key=f"in_type_{row['id']}")
                         
                         save_col, cancel_col = st.columns(2)
                         with save_col:
-                            if st.button("Save Changes", key=f"save_ed_{row['id']}", use_container_width=True):
+                            if st.button("Commit Changes", key=f"save_ed_{row['id']}", use_container_width=True):
                                 update_transaction(row['id'], row['date'].strftime('%Y-%m-%d'), edit_type, edit_cat.title(), edit_amt, "Edited")
                                 st.session_state[f"show_edit_{row['id']}"] = False
                                 st.toast("Modified Safely!")
                                 st.rerun()
                         with cancel_col:
-                            if st.button("Cancel", key=f"cancel_ed_{row['id']}", use_container_width=True):
+                            if st.button("Drop Token Modification", key=f"cancel_ed_{row['id']}", use_container_width=True):
                                         st.session_state[f"show_edit_{row['id']}"] = False
                                         st.rerun()
             else:
@@ -558,28 +570,28 @@ if not df_user.empty:
             st.markdown("<hr style='margin:1em 0px; border-color:#444;' />", unsafe_allow_html=True)
                 
     with col_right:
-        st.subheader("📊 Expense Distribution Analysis")
+        st.subheader("📊 Expense Distribution Analysis Matrix")
         exp_df = df_filtered[df_filtered["type"] == "Expense"]
         if not exp_df.empty:
             cat_totals = exp_df.groupby("category")["amount"].sum().reset_index()
             st.bar_chart(data=cat_totals, x="category", y="amount", color="#ff4b4b", use_container_width=True)
         else:
-            st.info("No localized expenses found for this selection frame.")
+            st.info("No records match selection analytics.")
 else:
-    st.info("No records inside your dashboard yet.")
+    st.info("No structural nodes found inside dashboard.")
 
-# --- SIDEBAR EMAIL SUPPORT ---
-st.sidebar.markdown("---")
-with st.sidebar.expander("📧 Help & Support"):
-    st.markdown("<small>Facing issues? Contact Support:</small>", unsafe_allow_html=True)
-    email_url = f"mailto:{MY_EMAIL}?subject=Ledger%20Internal%20Support"
-    st.link_button("📧 Email Support Desk", email_url, use_container_width=True)
+st.markdown("---")
 
-# --- LOGOUT ---
-st.sidebar.markdown("---")
-if st.sidebar.button("🔒 SECURE SIGN OUT", use_container_width=True):
-    st.session_state["logged_in"] = False
-    st.session_state["two_fa_verified"] = False
-    st.session_state["username"] = ""
-    st.session_state["account_mode"] = "Single"
-    st.rerun()
+# --- CODES FOR INTERACTIVE BOTTOM PLACED SECURE CONTROLS ---
+bot_col1, bot_col2 = st.columns(2)
+with bot_col1:
+    with st.expander("📧 Help & Support Center desk"):
+        email_url = f"mailto:{MY_EMAIL}?subject=Ledger%20Internal%20Support"
+        st.link_button("📧 Contact Technical Support Node", email_url, use_container_width=True)
+with bot_col2:
+    if st.button("🔒 SECURE TERMINAL SIGN OUT CONNECTION", use_container_width=True, type="primary"):
+        st.session_state["logged_in"] = False
+        st.session_state["two_fa_verified"] = False
+        st.session_state["username"] = ""
+        st.session_state["account_mode"] = "Single"
+        st.rerun()
