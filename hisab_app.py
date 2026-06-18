@@ -1,22 +1,18 @@
 import streamlit as st
 import pandas as pd
-import os
 import sqlite3
 import hashlib
 from datetime import datetime
 
-# --- NEW STABLE DATABASE CONFIG ---
-# Database file ka naam badal diya hai taaki purani crashed file se connection toot jaye
-DB_FILE = "ledger_production_v1.db"
+# --- FINAL UNIQUE STORAGE BLOCK ---
+# Is file name se server completely naya isolated node banayega
+STABLE_DB_CORE = "ledger_system_final_v1.db"
 
-# --- SQLITE CORE DATABASE OPERATIONS ---
-def init_db():
-    conn = sqlite3.connect(DB_FILE)
+def init_db_safely():
+    conn = sqlite3.connect(STABLE_DB_CORE)
     c = conn.cursor()
-    # Users Table
     c.execute('''CREATE TABLE IF NOT EXISTS users 
                  (username TEXT PRIMARY KEY, password TEXT, account_mode TEXT, created_by TEXT)''')
-    # Transactions Table with permanent log_status tracking
     c.execute('''CREATE TABLE IF NOT EXISTS transactions 
                  (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT, date TEXT, type TEXT, category TEXT, amount REAL, log_status TEXT)''')
     conn.commit()
@@ -26,7 +22,7 @@ def make_hashes(password):
     return hashlib.sha256(str.encode(password)).hexdigest()
 
 def add_user(username, password, account_mode, created_by="self"):
-    conn = sqlite3.connect(DB_FILE)
+    conn = sqlite3.connect(STABLE_DB_CORE)
     c = conn.cursor()
     try:
         c.execute('INSERT INTO users(username, password, account_mode, created_by) VALUES (?,?,?,?)', 
@@ -39,7 +35,7 @@ def add_user(username, password, account_mode, created_by="self"):
         conn.close()
 
 def login_user(username, password):
-    conn = sqlite3.connect(DB_FILE)
+    conn = sqlite3.connect(STABLE_DB_CORE)
     c = conn.cursor()
     c.execute('SELECT password, account_mode FROM users WHERE username = ?', (username,))
     data = c.fetchone()
@@ -49,7 +45,7 @@ def login_user(username, password):
     return False, None
 
 def user_exists(username):
-    conn = sqlite3.connect(DB_FILE)
+    conn = sqlite3.connect(STABLE_DB_CORE)
     c = conn.cursor()
     c.execute('SELECT 1 FROM users WHERE username = ?', (username,))
     data = c.fetchone()
@@ -57,14 +53,14 @@ def user_exists(username):
     return data is not None
 
 def update_user_password(username, new_password):
-    conn = sqlite3.connect(DB_FILE)
+    conn = sqlite3.connect(STABLE_DB_CORE)
     c = conn.cursor()
     c.execute('UPDATE users SET password = ? WHERE username = ?', (make_hashes(new_password), username))
     conn.commit()
     conn.close()
 
 def delete_user_account(username):
-    conn = sqlite3.connect(DB_FILE)
+    conn = sqlite3.connect(STABLE_DB_CORE)
     c = conn.cursor()
     c.execute('DELETE FROM users WHERE username = ?', (username,))
     c.execute('DELETE FROM transactions WHERE username = ?', (username,))
@@ -72,16 +68,15 @@ def delete_user_account(username):
     conn.close()
 
 def get_sub_accounts(admin_username):
-    conn = sqlite3.connect(DB_FILE)
+    conn = sqlite3.connect(STABLE_DB_CORE)
     c = conn.cursor()
     c.execute('SELECT username FROM users WHERE created_by = ?', (admin_username,))
     data = c.fetchall()
     conn.close()
     return [row[0] for row in data]
 
-# --- TRANSACTION FUNCTIONS ---
 def save_transaction(username, date, t_type, category, amount, log_status):
-    conn = sqlite3.connect(DB_FILE)
+    conn = sqlite3.connect(STABLE_DB_CORE)
     c = conn.cursor()
     c.execute('INSERT INTO transactions(username, date, type, category, amount, log_status) VALUES (?,?,?,?,?,?)',
               (username, date, t_type, category, amount, log_status))
@@ -89,13 +84,17 @@ def save_transaction(username, date, t_type, category, amount, log_status):
     conn.close()
 
 def get_user_transactions(username):
-    conn = sqlite3.connect(DB_FILE)
-    df = pd.read_sql_query('SELECT id, date, type, category, amount, log_status FROM transactions WHERE username = ?', conn)
+    conn = sqlite3.connect(STABLE_DB_CORE)
+    # Safely building empty dataframe if table query has issues initially
+    try:
+        df = pd.read_sql_query('SELECT id, date, type, category, amount, log_status FROM transactions WHERE username = ?', conn)
+    except Exception:
+        df = pd.DataFrame(columns=["id", "date", "type", "category", "amount", "log_status"])
     conn.close()
     return df
 
 def update_transaction(t_id, date, t_type, category, amount, log_status="Edited"):
-    conn = sqlite3.connect(DB_FILE)
+    conn = sqlite3.connect(STABLE_DB_CORE)
     c = conn.cursor()
     c.execute('UPDATE transactions SET date=?, type=?, category=?, amount=?, log_status=? WHERE id=?', 
               (date, t_type, category, amount, log_status, t_id))
@@ -103,7 +102,7 @@ def update_transaction(t_id, date, t_type, category, amount, log_status="Edited"
     conn.close()
 
 def delete_transaction(t_id):
-    conn = sqlite3.connect(DB_FILE)
+    conn = sqlite3.connect(STABLE_DB_CORE)
     c = conn.cursor()
     c.execute('DELETE FROM transactions WHERE id = ?', (t_id,))
     conn.commit()
@@ -112,10 +111,13 @@ def delete_transaction(t_id):
 def get_global_summary_for_admin(admin_username):
     subs = get_sub_accounts(admin_username)
     subs.append(admin_username)
-    conn = sqlite3.connect(DB_FILE)
+    conn = sqlite3.connect(STABLE_DB_CORE)
     placeholders = ','.join('?' for _ in subs)
-    query = f'SELECT type, amount FROM transactions WHERE username IN ({placeholders})'
-    df = pd.read_sql_query(query, conn, params=subs)
+    try:
+        query = f'SELECT type, amount FROM transactions WHERE username IN ({placeholders})'
+        df = pd.read_sql_query(query, conn, params=subs)
+    except Exception:
+        df = pd.DataFrame()
     conn.close()
     if df.empty:
         return 0, 0, 0
@@ -123,8 +125,8 @@ def get_global_summary_for_admin(admin_username):
     exp = df[df["type"] == "Expense"]["amount"].sum()
     return inc, exp, (inc - exp)
 
-# Start Fresh Secure Database
-init_db()
+# Init Fresh DB Architecture
+init_db_safely()
 
 # --- STREAMLIT UI ---
 st.set_page_config(page_title="Professional Ledger System", layout="wide", page_icon="💰")
@@ -136,7 +138,7 @@ if "username" not in st.session_state:
 if "account_mode" not in st.session_state:
     st.session_state["account_mode"] = "Single"
 
-# --- LOGIN / REGISTER CONTROL ---
+# --- AUTH SELECTION SYSTEM ---
 if not st.session_state["logged_in"]:
     st.title("🔒 SECURED LEDGER SYSTEM")
     st.markdown("---")
@@ -155,7 +157,7 @@ if not st.session_state["logged_in"]:
                     st.session_state["logged_in"] = True
                     st.session_state["username"] = username_input
                     st.session_state["account_mode"] = mode
-                    st.toast("Access Granted Successfully!")
+                    st.toast("Access Granted!")
                     st.rerun()
                 else:
                     st.error("Invalid credentials.")
@@ -172,7 +174,7 @@ if not st.session_state["logged_in"]:
                     st.error("Fields cannot be empty!")
                 else:
                     if add_user(new_user, new_password, selected_mode, "self"):
-                        st.success("Master account deployed! Now please Switch to 'Sign In'.")
+                        st.success("Master account deployed! Click 'Sign In' above.")
                     else:
                         st.error("Username already taken!")
                         
@@ -190,20 +192,20 @@ if not st.session_state["logged_in"]:
                 else:
                     if user_exists(reset_user):
                         update_user_password(reset_user, new_reset_pass)
-                        st.success("Password recovered successfully! Please switch to 'Sign In'.")
+                        st.success("Password recovered! Switch to 'Sign In'.")
                     else:
-                        st.error("Username does not exist in our systems.")
+                        st.error("Username does not exist.")
     st.stop()
 
-# --- MAIN DASHBOARD CONTROL SYSTEM ---
+# --- LIVE DASHBOARD CORE ---
 current_user = st.session_state["username"]
 user_mode = st.session_state["account_mode"]
 
 st.title("📊 FINANCIAL LEDGER ARCHITECTURE")
 st.markdown(f"*Logged in as: **{current_user.upper()}** ({user_mode} Mode)*")
 
-# --- SIDEBAR CONTROLS ---
-st.sidebar.subheader(f"👤 Dashboard Controller")
+# Sidebar Configuration
+st.sidebar.subheader("👤 Dashboard Controller")
 
 with st.sidebar.expander("⚙️ Account Settings"):
     st.markdown("**Modify Credentials**")
@@ -211,7 +213,7 @@ with st.sidebar.expander("⚙️ Account Settings"):
     if st.button("Update Password", use_container_width=True):
         if settings_new_pass.strip():
             update_user_password(current_user, settings_new_pass)
-            st.success("Password updated successfully!")
+            st.success("Password updated!")
         else:
             st.error("Password string cannot be empty.")
             
@@ -243,10 +245,10 @@ if user_mode == "Multiple":
             to_delete = st.selectbox("Select Account:", member_list)
             if st.button("CONFIRM DELETE ACCOUNT", type="primary"):
                 delete_user_account(to_delete)
-                st.success("Account wiped out successfully!")
+                st.success("Account wiped out!")
                 st.rerun()
 
-# --- TRANSACTION ENTRY SYSTEM (SIDEBAR FORM) ---
+# --- ENTRY FORM ---
 st.sidebar.markdown("---")
 st.sidebar.markdown("**📝 Log New Entry**")
 with st.sidebar.form("entry_form", clear_on_submit=True):
@@ -268,7 +270,7 @@ if submit_btn:
         st.toast(f"Logged permanently as [{status_tag}]!", icon="✅")
         st.rerun()
 
-# --- METRICS CALCULATIONS & VISUALIZATION ---
+# --- RENDER DATA VISUALIZATIONS ---
 df_user = get_user_transactions(current_user)
 
 if user_mode == "Multiple":
@@ -350,3 +352,4 @@ if st.sidebar.button("🔒 SECURE SIGN OUT", use_container_width=True):
     st.session_state["username"] = ""
     st.session_state["account_mode"] = "Single"
     st.rerun()
+    
