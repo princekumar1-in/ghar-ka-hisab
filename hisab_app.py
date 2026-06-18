@@ -392,6 +392,28 @@ with menu_col1:
             else:
                 update_user_2fa(current_user, settings_new_2fa)
                 st.success("PIN updated successfully!")
+        
+        st.markdown("---")
+        st.markdown("**Danger Zone Area**")
+        settings_del_pin = st.text_input("Enter 2-Step PIN To Confirm Deletion:", type="password", max_chars=6, key="settings_del_p")
+        if st.button("❗ DELETE MY ACCOUNT PERMANENTLY", type="primary", use_container_width=True):
+            conn = sqlite3.connect(STABLE_DB_CORE)
+            c = conn.cursor()
+            c.execute('SELECT two_fa_pin FROM users WHERE username = ?', (current_user,))
+            db_pin = c.fetchone()[0]
+            conn.close()
+            
+            if not verify_security_answer(current_user, auth_ans):
+                st.error("Incorrect Secret Recovery Answer!")
+            elif make_hashes(settings_del_pin) != db_pin:
+                st.error("Incorrect 2-Step Verification PIN!")
+            else:
+                delete_user_account(current_user)
+                token_key = f"trust_token_v3_{current_user}"
+                components.html(f'<script>localStorage.removeItem("{token_key}");</script>', height=0)
+                st.session_state["logged_in"] = False
+                st.session_state["two_fa_verified"] = False
+                st.rerun()
 
 member_list = []
 with menu_col2:
