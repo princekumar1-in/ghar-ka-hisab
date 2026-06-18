@@ -5,7 +5,8 @@ import sqlite3
 import hashlib
 from datetime import datetime
 
-# --- DATABASE & FOLDER CONFIG ---
+# --- DATABASE CONFIG ---
+# Direct app folder me database save karne se deployment par restart hone par data safe rahega
 DB_FILE = "system_database.db"
 
 # --- SQLITE CORE DATABASE OPERATIONS ---
@@ -15,9 +16,17 @@ def init_db():
     # Users Table
     c.execute('''CREATE TABLE IF NOT EXISTS users 
                  (username TEXT PRIMARY KEY, password TEXT, account_mode TEXT, created_by TEXT)''')
-    # Transactions Table with log_status tracking
+    # Transactions Table
     c.execute('''CREATE TABLE IF NOT EXISTS transactions 
                  (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT, date TEXT, type TEXT, category TEXT, amount REAL, log_status TEXT)''')
+    
+    # SMART AUTO-PATCH: Agar purana database exist karta hai aur log_status column nahi hai, toh add karo
+    try:
+        c.execute("ALTER TABLE transactions ADD COLUMN log_status TEXT DEFAULT 'Auto'")
+    except sqlite3.OperationalError:
+        # Column pehle se hai, koi dikkat nahi
+        pass
+        
     conn.commit()
     conn.close()
 
@@ -122,7 +131,7 @@ def get_global_summary_for_admin(admin_username):
     exp = df[df["type"] == "Expense"]["amount"].sum()
     return inc, exp, (inc - exp)
 
-# Start Database
+# Start Database Safely
 init_db()
 
 # --- STREAMLIT UI ---
@@ -204,7 +213,6 @@ st.markdown(f"*Logged in as: **{current_user.upper()}** ({user_mode} Mode)*")
 # --- SIDEBAR CONTROLS ---
 st.sidebar.subheader(f"👤 Dashboard Controller")
 
-# Account Settings Expansion Tool (Password Reset / Account Termination)
 with st.sidebar.expander("⚙️ Account Settings"):
     st.markdown("**Modify Credentials**")
     settings_new_pass = st.text_input("New Secure Password:", type="password", key="settings_p")
@@ -223,7 +231,6 @@ with st.sidebar.expander("⚙️ Account Settings"):
         st.session_state["username"] = ""
         st.rerun()
 
-# Admin Management Panel
 if user_mode == "Multiple":
     st.sidebar.markdown("---")
     st.sidebar.markdown("**👥 Manage Family Accounts**")
@@ -261,7 +268,6 @@ if submit_btn:
     if not category_input.strip():
         st.sidebar.error("Valid label designation required.")
     else:
-        # Check if the transaction timestamp matches current day for [Auto] vs [Edited] designation
         today_str = datetime.now().strftime('%Y-%m-%d')
         selected_date_str = date_input.strftime('%Y-%m-%d')
         status_tag = "Auto" if today_str == selected_date_str else "Edited"
@@ -311,7 +317,6 @@ if not df_user.empty:
             with st.container():
                 c1, c2, c3, c4 = st.columns([2, 3, 2, 2])
                 
-                # Appending the dynamic [Auto] or [Edited] tags safely
                 tag_color = "🟢" if row['log_status'] == "Auto" else "🟠"
                 c1.write(f"📅 {row['date'].strftime('%Y-%m-%d')}  \n{tag_color} *[{row['log_status']}]*")
                 
@@ -325,7 +330,6 @@ if not df_user.empty:
                     new_type = st.selectbox("Edit Type:", ["Expense", "Income"], index=0 if row['type'] == "Expense" else 1, key=f"type_{row['id']}")
                     
                     if st.button("Update Entry", key=f"up_{row['id']}", use_container_width=True):
-                        # Any structural update turns the dynamic designation status tag to "Edited"
                         update_transaction(row['id'], row['date'].strftime('%Y-%m-%d'), new_type, new_cat.title(), new_amt, "Edited")
                         st.toast("Entry modified safely!")
                         st.rerun()
