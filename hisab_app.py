@@ -6,7 +6,6 @@ import hashlib
 from datetime import datetime
 
 # --- DATABASE CONFIG ---
-# Direct app folder me database save karne se deployment par restart hone par data safe rahega
 DB_FILE = "system_database.db"
 
 # --- SQLITE CORE DATABASE OPERATIONS ---
@@ -20,11 +19,10 @@ def init_db():
     c.execute('''CREATE TABLE IF NOT EXISTS transactions 
                  (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT, date TEXT, type TEXT, category TEXT, amount REAL, log_status TEXT)''')
     
-    # SMART AUTO-PATCH: Agar purana database exist karta hai aur log_status column nahi hai, toh add karo
+    # Auto-Patch for log_status column check
     try:
         c.execute("ALTER TABLE transactions ADD COLUMN log_status TEXT DEFAULT 'Auto'")
     except sqlite3.OperationalError:
-        # Column pehle se hai, koi dikkat nahi
         pass
         
     conn.commit()
@@ -260,7 +258,7 @@ st.sidebar.markdown("**📝 Log New Entry**")
 with st.sidebar.form("entry_form", clear_on_submit=True):
     date_input = st.date_input("Transaction Date", datetime.now())
     type_input = st.selectbox("Type", ["Expense", "Income"])
-    category_input = st.text_input("Category / Particulars", placeholder="Diesel, Crop Sale, Grocery")
+    category_input = st.text_input("Category / Particulars", value="") # Kept perfectly clean and empty
     amount_input = st.number_input("Amount (INR)", min_value=1.0, step=1.0)
     submit_btn = st.form_submit_button("COMMIT TRANSACTION", use_container_width=True)
 
