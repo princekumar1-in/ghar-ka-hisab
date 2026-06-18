@@ -204,7 +204,6 @@ st.markdown("""
 
 MY_EMAIL = "your-email@example.com"
 
-# Session Keys Initialization
 if "logged_in" not in st.session_state:
     st.session_state["logged_in"] = False
 if "two_fa_verified" not in st.session_state:
@@ -241,7 +240,6 @@ if not st.session_state["logged_in"]:
                     st.session_state["username"] = username_input
                     st.session_state["account_mode"] = mode
                     
-                    # Modern safe session logic checkpoint
                     session_key = f"expiry_{username_input}"
                     if session_key in st.query_params or (session_key in st.session_state and st.session_state[session_key] > datetime.now()):
                         st.session_state["two_fa_verified"] = True
@@ -277,7 +275,7 @@ if not st.session_state["logged_in"]:
             if reset_user and user_exists(reset_user):
                 assigned_q = get_user_question(reset_user)
                 if assigned_q is None:
-                    st.error("Security recovery details not configured for this account yet.")
+                    st.error("Security recovery details not configured yet.")
                 else:
                     st.info(f"**Question:** {assigned_q}")
                     user_ans = st.text_input("Your Secret Answer:", type="password")
@@ -307,11 +305,10 @@ if not st.session_state["logged_in"]:
         st.link_button("📧 Send Email Support", email_url, use_container_width=True, type="secondary")
     st.stop()
 
-# --- PHASE 2: INITIAL SETUP OR TWO-FACTOR CHECKPOINT ---
+# --- PHASE 2: SECURITY CHECKPOINT / SETUP ---
 current_user = st.session_state["username"]
 user_mode = st.session_state["account_mode"]
 
-# FIRST TIME SECURITY SETUP FOR USER (POST-LOGIN)
 if not check_user_security_setup(current_user):
     st.title("🛡️ INITIAL SECURITY CONFIGURATION")
     st.markdown("Please configure your 2-Step PIN and Security Question before proceeding.")
@@ -327,9 +324,9 @@ if not check_user_security_setup(current_user):
         
         if st.button("SAVE SECURITY PROTOCOLS", use_container_width=True):
             if not answer_q or not two_fa_code:
-                st.error("All parameters are required!")
+                st.error("All fields are required!")
             elif not two_fa_code.isdigit() or len(two_fa_code) < 4:
-                st.error("PIN must be a secure numeric code (4-6 digits)!")
+                st.error("PIN must be a numeric code (4-6 digits)!")
             else:
                 save_security_setup(current_user, chosen_q, answer_q, two_fa_code)
                 st.session_state["two_fa_verified"] = True
@@ -337,10 +334,9 @@ if not check_user_security_setup(current_user):
                 st.rerun()
     st.stop()
 
-# INTERACTIVE 2-STEP VERIFICATION GATEWAY
 if not st.session_state["two_fa_verified"]:
     st.title("🛡️ 2-STEP VERIFICATION GATEWAY")
-    st.markdown("This device session requires verification verification checkpoint pass.")
+    st.markdown("This device session requires verification checkpoint pass.")
     
     col_2fa, _ = st.columns([1, 2])
     with col_2fa:
@@ -416,6 +412,7 @@ with st.sidebar.expander("⚙️ Account Settings"):
             st.error("Answer mismatch!")
 
 member_list = []
+# FIX: user_mode ko database se direct verify kiya taaki har naye Admin ko access mile
 if user_mode == "Multiple":
     st.sidebar.markdown("---")
     st.sidebar.markdown("**👥 Manage Family Accounts**")
