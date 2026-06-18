@@ -215,7 +215,7 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-MY_EMAIL = "your-email@example.com"
+MY_EMAIL = "vermaji3216@gmail.com"
 
 # Session Keys Initialization
 if "logged_in" not in st.session_state:
