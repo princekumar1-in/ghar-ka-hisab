@@ -3,7 +3,6 @@ import pandas as pd
 import sqlite3
 import hashlib
 import re
-import time
 from datetime import datetime, timedelta
 
 # --- PRODUCTION STORAGE ---
@@ -12,7 +11,6 @@ STABLE_DB_CORE = "ledger_system_secure_v2.db"
 def init_db_safely():
     conn = sqlite3.connect(STABLE_DB_CORE)
     c = conn.cursor()
-    # Users Table upgraded with security answers, 2FA pins, and account modes
     c.execute('''CREATE TABLE IF NOT EXISTS users 
                  (username TEXT PRIMARY KEY, password TEXT, account_mode TEXT, created_by TEXT,
                   sec_question TEXT, sec_answer TEXT, two_fa_pin TEXT)''')
@@ -24,7 +22,6 @@ def init_db_safely():
 def make_hashes(password):
     return hashlib.sha256(str.encode(password)).hexdigest()
 
-# Strict Password Validation Mix Policy
 def is_password_strong(password):
     if len(password) < 8:
         return False, "Password must be at least 8 characters long."
@@ -35,16 +32,16 @@ def is_password_strong(password):
     if not re.search(r"[0-9]", password):
         return False, "Password must contain at least one number."
     if not re.search(r"[@_!#$%^&*()<>?/\|}{~:]", password):
-        return False, "Password must contain at least one special character (e.g. @, #, $)."
+        return False, "Password must contain at least one special character."
     return True, "Strong Password"
 
-def add_user(username, password, account_mode, sec_q, sec_a, two_fa, created_by="self"):
+def add_user(username, password, account_mode, created_by="self"):
     conn = sqlite3.connect(STABLE_DB_CORE)
     c = conn.cursor()
     try:
         c.execute('''INSERT INTO users(username, password, account_mode, created_by, sec_question, sec_answer, two_fa_pin) 
                      VALUES (?,?,?,?,?,?,?)''', 
-                  (username, make_hashes(password), account_mode, created_by, sec_q, make_hashes(sec_a.strip().lower()), make_hashes(two_fa)))
+                  (username, make_hashes(password), account_mode, created_by, None, None, None))
         conn.commit()
         return True
     except sqlite3.IntegrityError:
@@ -55,12 +52,30 @@ def add_user(username, password, account_mode, sec_q, sec_a, two_fa, created_by=
 def login_user(username, password):
     conn = sqlite3.connect(STABLE_DB_CORE)
     c = conn.cursor()
-    c.execute('SELECT password, account_mode, two_fa_pin FROM users WHERE username = ?', (username,))
+    c.execute('SELECT password, account_mode FROM users WHERE username = ?', (username,))
     data = c.fetchone()
     conn.close()
     if data:
-        return hashlib.sha256(str.encode(password)).hexdigest() == data[0], data[1], data[2]
-    return False, None, None
+        return hashlib.sha256(str.encode(password)).hexdigest() == data[0], data[1]
+    return False, None
+
+def check_user_security_setup(username):
+    conn = sqlite3.connect(STABLE_DB_CORE)
+    c = conn.cursor()
+    c.execute('SELECT sec_question, two_fa_pin FROM users WHERE username = ?', (username,))
+    data = c.fetchone()
+    conn.close()
+    if data and data[0] is not None and data[1] is not None:
+        return True
+    return False
+
+def save_security_setup(username, sec_q, sec_a, two_fa):
+    conn = sqlite3.connect(STABLE_DB_CORE)
+    c = conn.cursor()
+    c.execute('UPDATE users SET sec_question=?, sec_answer=?, two_fa_pin=? WHERE username=?',
+              (sec_q, make_hashes(sec_a.strip().lower()), make_hashes(two_fa), username))
+    conn.commit()
+    conn.close()
 
 def user_exists(username):
     conn = sqlite3.connect(STABLE_DB_CORE)
@@ -76,7 +91,7 @@ def verify_security_answer(username, answer):
     c.execute('SELECT sec_answer FROM users WHERE username = ?', (username,))
     data = c.fetchone()
     conn.close()
-    if data:
+    if data and data[0]:
         return make_hashes(answer.strip().lower()) == data[0]
     return False
 
@@ -199,7 +214,6 @@ if "username" not in st.session_state:
 if "account_mode" not in st.session_state:
     st.session_state["account_mode"] = "Single"
 
-# SECURITY QUESTIONS POOL
 SECURITY_QUESTIONS = [
     "What is the name of your first school?",
     "What is your mother's maiden name?",
@@ -221,15 +235,15 @@ if not st.session_state["logged_in"]:
             username_input = st.text_input("Username:").strip().lower()
             password_input = st.text_input("Password:", type="password")
             if st.button("SIGN IN", use_container_width=True):
-                success, mode, hashed_pin = login_user(username_input, password_input)
+                success, mode = login_user(username_input, password_input)
                 if success:
                     st.session_state["logged_in"] = True
                     st.session_state["username"] = username_input
                     st.session_state["account_mode"] = mode
                     
-                    # 3-Day device session logic checkpoint
+                    # Modern safe session logic checkpoint
                     session_key = f"expiry_{username_input}"
-                    if session_key in st.sidebar.get_all_query_params or (session_key in st.session_state and st.session_state[session_key] > datetime.now()):
+                    if session_key in st.query_params or (session_key in st.session_state and st.session_state[session_key] > datetime.now()):
                         st.session_state["two_fa_verified"] = True
                     else:
                         st.session_state["two_fa_verified"] = False
@@ -240,61 +254,52 @@ if not st.session_state["logged_in"]:
         elif auth_choice == "Create Master Account":
             st.subheader("📝 Register Master Admin")
             new_user = st.text_input("Choose Unique Username:").strip().lower()
-            new_password = st.text_input("Create Strong Password:", type="password", help="Min 8 letters mixed with Uppercase, Numbers & Special symbols")
-            
-            st.markdown("---")
-            st.markdown("**🛡️ Setup Security Recovery Protocol**")
-            chosen_q = st.selectbox("Select a Security Question:", SECURITY_QUESTIONS)
-            answer_q = st.text_input("Your Secret Answer:", type="password")
-            
-            st.markdown("---")
-            st.markdown("**📱 Setup 2-Step Verification**")
-            two_fa_code = st.text_input("Create 6-Digit 2-Step PIN:", type="password", max_chars=6)
-            
+            new_password = st.text_input("Create Strong Password:", type="password")
             mode_selection = st.selectbox("Account Usage Mode:", ["Single User Mode", "Multiple Accounts Mode (Family/Team)"])
             selected_mode = "Single" if "Single" in mode_selection else "Multiple"
             
-            if st.button("REGISTER SECURE SYSTEM", use_container_width=True):
+            if st.button("REGISTER NOW", use_container_width=True):
                 is_strong, pass_msg = is_password_strong(new_password)
-                if not new_user or not new_password or not answer_q or not two_fa_code:
-                    st.error("All parameters are mandatory!")
+                if not new_user or not new_password:
+                    st.error("Fields cannot be empty!")
                 elif not is_strong:
                     st.error(pass_msg)
-                elif not two_fa_code.isdigit() or len(two_fa_code) < 4:
-                    st.error("2-Step Verification code must be a secure numeric PIN!")
                 else:
-                    if add_user(new_user, new_password, selected_mode, chosen_q, answer_q, two_fa_code, "self"):
-                        st.success("Master network safe node deployed! Click 'Sign In' above.")
+                    if add_user(new_user, new_password, selected_mode, "self"):
+                        st.success("Account created! Switch to 'Sign In'.")
                     else:
-                        st.error("This Username is already taken! Try another one.")
+                        st.error("Username already taken!")
                         
         elif auth_choice == "Forget Password":
-            st.subheader("🔄 Emergency Password Reset")
+            st.subheader("🔄 Reset Password")
             reset_user = st.text_input("Enter Registered Username:").strip().lower()
             
             if reset_user and user_exists(reset_user):
                 assigned_q = get_user_question(reset_user)
-                st.info(f"**Security Question:** {assigned_q}")
-                user_ans = st.text_input("Provide Your Secret Answer:", type="password")
-                st.markdown("---")
-                new_reset_pass = st.text_input("New Strong Password:", type="password")
-                confirm_reset_pass = st.text_input("Confirm New Password:", type="password")
-                
-                if st.button("RESET SECURE SYSTEM PASSWORD", use_container_width=True):
-                    is_strong, pass_msg = is_password_strong(new_reset_pass)
-                    if not user_ans or not new_reset_pass:
-                        st.error("Input tokens are required.")
-                    elif new_reset_pass != confirm_reset_pass:
-                        st.error("Passwords mismatch!")
-                    elif not is_strong:
-                        st.error(pass_msg)
-                    elif verify_security_answer(reset_user, user_ans):
-                        update_user_password(reset_user, new_reset_pass)
-                        st.success("Password reset complete! Go to 'Sign In' tab.")
-                    else:
-                        st.error("Security answer validation failed!")
+                if assigned_q is None:
+                    st.error("Security recovery details not configured for this account yet.")
+                else:
+                    st.info(f"**Question:** {assigned_q}")
+                    user_ans = st.text_input("Your Secret Answer:", type="password")
+                    st.markdown("---")
+                    new_reset_pass = st.text_input("New Strong Password:", type="password")
+                    confirm_reset_pass = st.text_input("Confirm New Password:", type="password")
+                    
+                    if st.button("RESET PASSWORD", use_container_width=True):
+                        is_strong, pass_msg = is_password_strong(new_reset_pass)
+                        if not user_ans or not new_reset_pass:
+                            st.error("Fields cannot be empty!")
+                        elif new_reset_pass != confirm_reset_pass:
+                            st.error("Passwords mismatch!")
+                        elif not is_strong:
+                            st.error(pass_msg)
+                        elif verify_security_answer(reset_user, user_ans):
+                            update_user_password(reset_user, new_reset_pass)
+                            st.success("Password changed! Switch to 'Sign In'.")
+                        else:
+                            st.error("Incorrect answer!")
             elif reset_user:
-                st.error("Username index path not found.")
+                st.error("Username not found.")
                 
     st.markdown("---")
     with st.expander("📧 Need Help / Report Problem?"):
@@ -302,21 +307,47 @@ if not st.session_state["logged_in"]:
         st.link_button("📧 Send Email Support", email_url, use_container_width=True, type="secondary")
     st.stop()
 
-# --- PHASE 2: TWO-FACTOR (2-STEP) VALIDATION GATEWAY ---
+# --- PHASE 2: INITIAL SETUP OR TWO-FACTOR CHECKPOINT ---
 current_user = st.session_state["username"]
 user_mode = st.session_state["account_mode"]
 
+# FIRST TIME SECURITY SETUP FOR USER (POST-LOGIN)
+if not check_user_security_setup(current_user):
+    st.title("🛡️ INITIAL SECURITY CONFIGURATION")
+    st.markdown("Please configure your 2-Step PIN and Security Question before proceeding.")
+    
+    col_setup, _ = st.columns([1, 2])
+    with col_setup:
+        st.subheader("1️⃣ Select Security Question")
+        chosen_q = st.selectbox("Choose a question (For password recovery):", SECURITY_QUESTIONS)
+        answer_q = st.text_input("Enter Your Answer:", type="password")
+        
+        st.subheader("2️⃣ Setup 2-Step Verification")
+        two_fa_code = st.text_input("Create 6-Digit PIN:", type="password", max_chars=6)
+        
+        if st.button("SAVE SECURITY PROTOCOLS", use_container_width=True):
+            if not answer_q or not two_fa_code:
+                st.error("All parameters are required!")
+            elif not two_fa_code.isdigit() or len(two_fa_code) < 4:
+                st.error("PIN must be a secure numeric code (4-6 digits)!")
+            else:
+                save_security_setup(current_user, chosen_q, answer_q, two_fa_code)
+                st.session_state["two_fa_verified"] = True
+                st.toast("Security Parameters Registered!")
+                st.rerun()
+    st.stop()
+
+# INTERACTIVE 2-STEP VERIFICATION GATEWAY
 if not st.session_state["two_fa_verified"]:
     st.title("🛡️ 2-STEP VERIFICATION GATEWAY")
-    st.subheader(f"Account: {current_user.upper()}")
-    st.markdown("This device session requires a 2-Step validation token checkpoint pass.")
+    st.markdown("This device session requires verification verification checkpoint pass.")
     
     col_2fa, _ = st.columns([1, 2])
     with col_2fa:
-        pin_entry = st.text_input("Enter 6-Digit Secondary Pin:", type="password", max_chars=6)
+        pin_entry = st.text_input("Enter Your 2-Step PIN:", type="password", max_chars=6)
         trust_device = st.checkbox("Keep me logged in on this device for 3 days")
         
-        if st.button("VERIFY SECURE NODE", use_container_width=True):
+        if st.button("VERIFY SECURE PIN", use_container_width=True):
             conn = sqlite3.connect(STABLE_DB_CORE)
             c = conn.cursor()
             c.execute('SELECT two_fa_pin FROM users WHERE username = ?', (current_user,))
@@ -326,12 +357,11 @@ if not st.session_state["two_fa_verified"]:
             if make_hashes(pin_entry) == db_pin:
                 st.session_state["two_fa_verified"] = True
                 if trust_device:
-                    # Session expires perfectly in 3 days frame
                     st.session_state[f"expiry_{current_user}"] = datetime.now() + timedelta(days=3)
                 st.toast("Security Clearance Granted!")
                 st.rerun()
             else:
-                st.error("Invalid Security Verification Pin!")
+                st.error("Invalid Security Verification PIN!")
                 
     st.markdown("---")
     if st.button("🔒 Cancel Sign In & Exit"):
@@ -339,24 +369,23 @@ if not st.session_state["two_fa_verified"]:
         st.rerun()
     st.stop()
 
-# --- PHASE 3: LIVE SECURE ARCHITECTURE MAIN ENVIRONMENT ---
+# --- PHASE 3: LIVE SECURE ENVIRONMENT ---
 st.title("📊 FINANCIAL LEDGER ARCHITECTURE")
-st.markdown(f"*Secure Session Active: **{current_user.upper()}** ({user_mode} Mode)*")
+st.markdown(f"*Secure Session Active: **{current_user.upper()}***")
 
 st.sidebar.subheader("👤 Dashboard Controller")
 
-# Account settings with mandatory security question validation checks
 with st.sidebar.expander("⚙️ Account Settings"):
     st.markdown("**Security Authentication**")
-    auth_ans = st.text_input("Verify Secret Recovery Answer First:", type="password", key="sett_ans_check")
+    auth_ans = st.text_input("Verify Secret Answer First:", type="password", key="sett_ans_check")
     
     st.markdown("---")
     st.markdown("**Modify Credentials**")
     settings_new_pass = st.text_input("New Strong Password:", type="password", key="settings_p")
-    if st.button("Update System Password", use_container_width=True):
+    if st.button("Update Password", use_container_width=True):
         is_strong, pass_msg = is_password_strong(settings_new_pass)
         if not verify_security_answer(current_user, auth_ans):
-            st.error("Incorrect Secret Recovery Answer!")
+            st.error("Incorrect Answer!")
         elif not is_strong:
             st.error(pass_msg)
         else:
@@ -366,25 +395,25 @@ with st.sidebar.expander("⚙️ Account Settings"):
     st.markdown("---")
     st.markdown("**Modify 2-Step Code**")
     settings_new_2fa = st.text_input("New 2-Step PIN:", type="password", max_chars=6, key="settings_2fa")
-    if st.button("Update 2-Step PIN", use_container_width=True):
+    if st.button("Update PIN", use_container_width=True):
         if not verify_security_answer(current_user, auth_ans):
-            st.error("Incorrect Secret Recovery Answer!")
+            st.error("Incorrect Answer!")
         elif not settings_new_2fa.isdigit() or len(settings_new_2fa) < 4:
-            st.error("Provide a valid secondary numerical pin structure.")
+            st.error("Provide a valid numeric pin structure.")
         else:
             update_user_2fa(current_user, settings_new_2fa)
-            st.success("2-Step Code Changed!")
+            st.success("PIN updated!")
 
     st.markdown("---")
     st.markdown("**Danger Zone**")
-    if st.button("❗ TERMINATE SYSTEM CORE", type="primary", use_container_width=True):
+    if st.button("❗ DELETE MY ACCOUNT PERMANENTLY", type="primary", use_container_width=True):
         if verify_security_answer(current_user, auth_ans):
             delete_user_account(current_user)
             st.session_state["logged_in"] = False
             st.session_state["two_fa_verified"] = False
             st.rerun()
         else:
-            st.error("Security answer mismatch block triggered!")
+            st.error("Answer mismatch!")
 
 member_list = []
 if user_mode == "Multiple":
@@ -395,23 +424,18 @@ if user_mode == "Multiple":
         sub_name = st.text_input("Member Username:").strip().lower()
         sub_pass = st.text_input("Member Password:", type="password")
         
-        st.markdown("<small>Member Security Presets</small>", unsafe_allow_html=True)
-        sub_q = st.selectbox("Member recovery question:", SECURITY_QUESTIONS, key="sub_q_reg")
-        sub_a = st.text_input("Member secret answer:", type="password", key="sub_a_reg")
-        sub_pin = st.text_input("Member 2-Step PIN:", type="password", max_chars=6, key="sub_p_reg")
-        
         if st.button("Create Member Account"):
             is_strong, pass_msg = is_password_strong(sub_pass)
-            if sub_name and sub_pass and sub_a and sub_pin:
+            if sub_name and sub_pass:
                 if not is_strong:
                     st.error(pass_msg)
-                elif add_user(sub_name, sub_pass, "Single", sub_q, sub_a, sub_pin, current_user):
-                    st.success(f"Account for '{sub_name}' active!")
+                elif add_user(sub_name, sub_pass, "Single", current_user):
+                    st.success("Member active!")
                     st.rerun()
                 else:
-                    st.error("Member name already exists.")
+                    st.error("Username already exists.")
             else:
-                st.error("All parameters are required!")
+                st.error("Fields cannot be empty!")
                     
     member_list = get_sub_accounts(current_user)
     if member_list:
@@ -434,7 +458,7 @@ with st.sidebar.form("entry_form", clear_on_submit=True):
 
 if submit_btn:
     if not category_input.strip():
-        st.sidebar.error("Valid label designation required.")
+        st.sidebar.error("Valid label required.")
     else:
         today_str = datetime.now().strftime('%Y-%m-%d')
         selected_date_str = date_input.strftime('%Y-%m-%d')
@@ -529,8 +553,8 @@ if not df_user.empty:
                                 st.rerun()
                         with cancel_col:
                             if st.button("Cancel", key=f"cancel_ed_{row['id']}", use_container_width=True):
-                                st.session_state[f"show_edit_{row['id']}"] = False
-                                st.rerun()
+                                        st.session_state[f"show_edit_{row['id']}"] = False
+                                        st.rerun()
             else:
                 st.markdown("<span style='color: #888; font-size: 0.85em;'>🔒 Member Entry (Read-Only Mode)</span>", unsafe_allow_html=True)
                             
@@ -545,7 +569,7 @@ if not df_user.empty:
         else:
             st.info("No localized expenses found for this selection frame.")
 else:
-    st.info("No dynamic records locked inside your private node yet.")
+    st.info("No records inside your dashboard yet.")
 
 # --- SIDEBAR EMAIL SUPPORT ---
 st.sidebar.markdown("---")
