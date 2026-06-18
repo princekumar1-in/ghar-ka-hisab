@@ -1,16 +1,16 @@
 import streamlit as st
 import pandas as pd
 from datetime import datetime
+import re
 
-# 1. Page Config & High-Level CSS (Streamlit Logos aur Trash UI ko jad se saaf karne ke liye)
+# 1. Page Config & Strict CSS Overrides (Logo, Crown, Footer ko hide karne ke liye)
 st.set_page_config(
     page_title="Financial Ledger Architecture", 
     layout="wide", 
     initial_sidebar_state="expanded"
 )
 
-# Ultimate CSS override to destroy the bottom right red crown and purple block completely
-absolute_hide_css = """
+absolute_clean_style = """
     <style>
     #MainMenu {visibility: hidden;}
     footer {visibility: hidden;}
@@ -18,16 +18,17 @@ absolute_hide_css = """
     .stDeployButton {display:none !important;}
     div[data-testid="stStatusWidget"] {visibility: hidden !important;}
     
-    /* Strict override for bottom logos */
+    /* Strong element hidden block */
     footer, div[data-testid="stDecoration"], .st-emotion-cache-1pxn4b9, .st-emotion-cache-12galv2 {
         display: none !important;
         visibility: hidden !important;
     }
-    img[src*="streamlit"], div[class*="viewerBadge"] {
+    img[src*="streamlit"], div[class*="viewerBadge"], [className*="viewerBadge"] {
         display: none !important;
     }
+    iframe {display: none !important;}
     
-    /* Fixing the spacing and sidebar background */
+    /* Layout styling */
     [data-testid="stSidebar"] {
         background-color: #11151c;
     }
@@ -37,105 +38,201 @@ absolute_hide_css = """
     }
     </style>
 """
-st.markdown(absolute_hide_css, unsafe_allow_html=True)
+st.markdown(absolute_clean_style, unsafe_allow_html=True)
 
-# 2. Database & State Simulation
+# Password validation helper function
+def check_password_strength(password):
+    if len(password) < 6:
+        return False, "Password kam se kam 6 characters ka hona chahiye!"
+    if not re.search("[A-Z]", password):
+        return False, "Password me kam se kam ek CAPITAL letter hona chahiye!"
+    if not re.search("[0-9]", password):
+        return False, "Password me kam se kam ek Number (0-9) hona chahiye!"
+    if not re.search("[_@#$]", password):
+        return False, "Password me kam se kam ek Special character (_ @ # $) hona chahiye!"
+    return True, "Strong Password!"
+
+# 2. Advanced In-Memory Database Initialization
 if "users_db" not in st.session_state:
     st.session_state.users_db = {
-        "PRINCE": {"password": "adminpassword", "role": "Admin", "type": "Multiple"},
-        "JAYRAM": {"password": "123", "role": "User", "type": "Single"}
+        "PRINCE": {
+            "password": "AdminPassword@123", 
+            "role": "Admin", 
+            "type": "Multiple",
+            "sec_qst": "What is your pet name?",
+            "sec_ans": "prince",
+            "two_step_pin": "9999"
+        },
+        "JAYRAM": {
+            "password": "UserPassword@123", 
+            "role": "User", 
+            "type": "Single",
+            "sec_qst": "What is your favorite city?",
+            "sec_ans": "delhi",
+            "two_step_pin": "1234"
+        }
     }
 
 if "ledger_entries" not in st.session_state:
     st.session_state.ledger_entries = []
 
+# Auth state handles
 if "logged_in_user" not in st.session_state:
     st.session_state.logged_in_user = None
-
 if "user_role" not in st.session_state:
     st.session_state.user_role = None
+if "temp_user" not in st.session_state:
+    st.session_state.temp_user = None
 
-# --- AUTHENTICATION SCREEN ---
+# --- AUTHENTICATION INTERFACE ---
 if st.session_state.logged_in_user is None:
     st.title(" FINANCIAL LEDGER ARCHITECTURE")
     
+    # Sign-in / Registration routing
     auth_mode = st.radio("Choose Action:", ["Sign In", "Create New Account / Register"], horizontal=True)
     st.markdown("---")
 
+    # Flow 1: Secure Login with 2-Step verification
     if auth_mode == "Sign In":
-        st.subheader("🔒 Secure Account Login")
-        username_input = st.text_input("Username").strip()
-        password_input = st.text_input("Password", type="password")
-        
-        if st.button("SECURE SIGN IN", use_container_width=True):
-            if username_input in st.session_state.users_db:
-                if st.session_state.users_db[username_input]["password"] == password_input:
-                    st.session_state.logged_in_user = username_input
-                    st.session_state.user_role = st.session_state.users_db[username_input]["role"]
+        if st.session_state.temp_user is None:
+            st.subheader("🔒 Step 1: Account Login")
+            username_input = st.text_input("Username").strip()
+            password_input = st.text_input("Password", type="password")
+            
+            if st.button("PROCEED TO VERIFICATION", use_container_width=True):
+                if username_input in st.session_state.users_db:
+                    if st.session_state.users_db[username_input]["password"] == password_input:
+                        st.session_state.temp_user = username_input
+                        st.rerun()
+                    else:
+                        st.error("🔒 Invalid Password. Please try again.")
+                else:
+                    st.error(f"👤 User '{username_input}' not found.")
+            
+            # Forgot Password via Security Question
+            with st.expander("🔑 Forgot Password via Security Question?"):
+                f_user = st.text_input("Enter Username:", key="f_u").strip()
+                if f_user in st.session_state.users_db:
+                    st.info(f"Question: {st.session_state.users_db[f_user]['sec_qst']}")
+                    f_ans = st.text_input("Enter Answer:", key="f_a").lower().strip()
+                    if st.button("Verify & Reveal Password", use_container_width=True):
+                        if f_ans == st.session_state.users_db[f_user]['sec_ans']:
+                            st.success(f"🔑 Your Password is: **{st.session_state.users_db[f_user]['password']}**")
+                        else:
+                            st.error("Galat Answer! Kripya sahi answer dalein.")
+                elif f_user:
+                    st.error("User not found.")
+        else:
+            # Step 2: Two-step authentication code entry
+            st.subheader(f"🛡️ Step 2: 2-Step Verification for {st.session_state.temp_user}")
+            pin_input = st.text_input("Enter 4-Digit Security PIN", type="password", max_chars=4)
+            
+            col_b1, col_b2 = st.columns(2)
+            with col_b1:
+                if st.button("VERIFY & SIGN IN", use_container_width=True):
+                    target_pin = st.session_state.users_db[st.session_state.temp_user].get("two_step_pin", "1234")
+                    if pin_input == target_pin:
+                        st.session_state.logged_in_user = st.session_state.temp_user
+                        st.session_state.user_role = st.session_state.users_db[st.session_state.temp_user]["role"]
+                        st.session_state.temp_user = None
+                        st.rerun()
+                    else:
+                        st.error("Galat Security Code/PIN!")
+            with col_b2:
+                if st.button("Back to Login", use_container_width=True):
+                    st.session_state.temp_user = None
                     st.rerun()
-                else:
-                    st.error("🔒 Invalid Password. Please try again.")
-            else:
-                st.error(f"👤 User '{username_input}' not found. Choose 'Create New Account' above.")
-        
-        # Forgot Password
-        with st.expander("🔑 Forgot Password?"):
-            forgot_user = st.text_input("Enter your Username to recover:", key="recover_u").strip()
-            if st.button("Recover Password", use_container_width=True):
-                if forgot_user in st.session_state.users_db:
-                    recovered_pass = st.session_state.users_db[forgot_user]["password"]
-                    st.success(f"🔑 Your Password is: **{recovered_pass}**")
-                else:
-                    st.error("Username not found in architecture database.")
 
+    # Flow 2: Register Account with strict security parameters
     else:
-        st.subheader("✨ Register New Ledger Account")
-        new_username = st.text_input("Choose Username (e.g., Jayram1)").strip()
+        st.subheader("✨ Register New Secured Account")
+        new_username = st.text_input("Choose Username").strip()
         new_password = st.text_input("Choose Password", type="password")
+        
+        # Security Metrics Display
+        if new_password:
+            is_strong, msg = check_password_strength(new_password)
+            if is_strong:
+                st.success(f"🔒 {msg}")
+            else:
+                st.warning(f"⚠️ {msg}")
+                
         confirm_password = st.text_input("Confirm Password", type="password")
         
-        # Wapas Add kiya gaya aapka layout selection option
-        account_type = st.radio("Account Type Chunein:", ["Single User Account", "Multiple Accounts (Family/Admin)"])
+        st.markdown("#### Setup System Recovery Controls:")
+        s_qst = st.selectbox("Select Security Question:", [
+            "What is your pet name?",
+            "What is your favorite city?",
+            "What was your first school name?"
+        ])
+        s_ans = st.text_input("Security Answer").lower().strip()
+        t_pin = st.text_input("Set 4-Digit 2-Step PIN (Numeric Only)", type="password", max_chars=4)
         
-        if st.button("REGISTER & CREATE ACCOUNT", use_container_width=True):
-            if not new_username or not new_password:
-                st.error("Fields cannot be empty!")
+        account_type = st.radio("Account Type:", ["Single User Account", "Multiple Accounts (Family/Admin)"])
+        
+        if st.button("REGISTER & CREATE SECURE ACCOUNT", use_container_width=True):
+            if not new_username or not new_password or not s_ans or not t_pin:
+                st.error("Sabhhi fields ko bharna mandatory hai!")
             elif new_username in st.session_state.users_db:
-                st.error("This username already exists. Choose another one.")
+                st.error("Ye username pehle se register hai!")
             elif new_password != confirm_password:
-                st.error("Passwords do not match!")
+                st.error("Passwords match nahi ho rahe hain!")
+            elif not check_password_strength(new_password)[0]:
+                st.error("Kripya pehle password ko rules ke mutabik STRONG banayein!")
+            elif not t_pin.isdigit() or len(t_pin) != 4:
+                st.error("2-Step PIN sirf 4 digits ka numeric code hona chahiye!")
             else:
-                # Role allocation based on selected account type
                 role = "Admin" if account_type == "Multiple Accounts (Family/Admin)" else "User"
                 st.session_state.users_db[new_username] = {
                     "password": new_password, 
                     "role": role,
-                    "type": "Multiple" if "Multiple" in account_type else "Single"
+                    "type": "Multiple" if "Multiple" in account_type else "Single",
+                    "sec_qst": s_qst,
+                    "sec_ans": s_ans,
+                    "two_step_pin": t_pin
                 }
-                st.success(f"🎉 Account '{new_username}' created as {role}! Switch to 'Sign In' to log in.")
+                st.success(f"🎉 Account '{new_username}' successfully verify ho gaya hai! Kripya 'Sign In' par switch karein.")
 
-# --- MAIN APPLICATION WORKSPACE ---
+# --- MAIN APP CONSOLE ---
 else:
     current_user = st.session_state.logged_in_user
     user_role = st.session_state.user_role
 
     # ==========================================
-    # SIDEBAR CONTROLLER SYSTEM
+    # SIDEBAR CONTROL PANEL
     # ==========================================
     with st.sidebar:
         st.markdown("### 👤 Dashboard Controller")
         
         with st.expander("⚙️ Account Settings"):
-            st.write(f"Secure Active User: **{current_user}**")
-            new_pass = st.text_input("Change Password", type="password", key="pwd_update")
+            st.write(f"Active User: **{current_user}**")
+            new_pass = st.text_input("Change Password", type="password", key="p_up")
+            if new_pass:
+                is_st, msg_st = check_password_strength(new_pass)
+                if not is_st: st.warning(msg_st)
+                
             if st.button("Update Password", use_container_width=True):
-                if new_pass:
+                if new_pass and check_password_strength(new_pass)[0]:
                     st.session_state.users_db[current_user]["password"] = new_pass
                     st.success("Password Updated!")
+                else:
+                    st.error("Sahi aur strong password dalein!")
+            
+            # User self account deletion rule
+            st.markdown("---")
+            if st.checkbox("⚠️ Self Delete My Account"):
+                if st.button("CONFIRM DELETION", color="red", use_container_width=True):
+                    if current_user == "PRINCE":
+                        st.error("Main Admin Account delete nahi kiya ja sakta!")
+                    else:
+                        del st.session_state.users_db[current_user]
+                        st.session_state.logged_in_user = None
+                        st.session_state.user_role = None
+                        st.rerun()
 
         st.markdown("---")
 
-        # Admin Features (Only visible to admin accounts)
+        # Admin controls for user databases
         if user_role == "Admin":
             st.markdown("### 👥 Manage Family Accounts")
             
@@ -144,22 +241,28 @@ else:
                 mem_password = st.text_input("Member Password:", type="password", key="add_p")
                 if st.button("Create Member Account", use_container_width=True):
                     if mem_username and mem_password:
-                        st.session_state.users_db[mem_username] = {"password": mem_password, "role": "User", "type": "Single"}
-                        st.success(f"Account '{mem_username}' Created!")
+                        st.session_state.users_db[mem_username] = {
+                            "password": mem_password, 
+                            "role": "User", 
+                            "type": "Single",
+                            "sec_qst": "What is your pet name?",
+                            "sec_ans": "default",
+                            "two_step_pin": "1234"
+                        }
+                        st.success(f"Member '{mem_username}' added!")
                         st.rerun()
             
             with st.expander("🗑️ Delete Member Account"):
                 delete_user = st.selectbox("Select account to remove:", [u for u in st.session_state.users_db if u != "PRINCE"])
-                if st.button("Remove Account", use_container_width=True):
+                if st.button("Remove Selected Account", use_container_width=True):
                     del st.session_state.users_db[delete_user]
-                    st.warning(f"Removed {delete_user}")
+                    st.warning(f"Successfully deleted {delete_user}")
                     st.rerun()
             
             st.markdown("---")
 
-        # Universal Form Layout (Available for PRINCE, JAYRAM, and new users)
+        # Log New Entry (Universal Form Panel)
         st.markdown("### 📝 Log New Entry")
-        
         entry_date = st.date_input("Transaction Date", datetime.now())
         entry_type = st.selectbox("Type", ["Expense", "Revenue"])
         category = st.text_input("Category / Particulars")
@@ -182,11 +285,11 @@ else:
 
         st.markdown("---")
         
-        # Wapas Add kiya gaya Aapka Help & Support System Expandable
-        with st.expander("ℹ️ Help & Support"):
-            st.write("**Architecture Panel v3.0**")
-            st.write("• Secure Network Ledger Activated.")
-            st.write("• Contact Admin (Prince) for configuration backups.")
+        # HELP & SUPPORT INJECTED WITH CONTACT EMAIL (As requested!)
+        with st.expander("✉️ Help & Support"):
+            st.write("**Architecture Support Desk**")
+            st.write("For technical queries or issues contact:")
+            st.code("vermaji3216@gmail.com", language="text")
 
         st.markdown("---")
         if st.button("🔒 SECURE SIGN OUT", use_container_width=True):
@@ -195,13 +298,12 @@ else:
             st.rerun()
 
     # ==========================================
-    # CENTRAL DISPLAY INTERFACE
+    # CORE FRAMEWORK VIEWPORTS
     # ==========================================
     st.title("📊 FINANCIAL LEDGER ARCHITECTURE")
     st.caption(f"Secure Session Active: **{current_user}**")
     st.markdown("---")
 
-    # Metrics calculation logic
     df_entries = pd.DataFrame(st.session_state.ledger_entries)
     
     total_rev = 0.0
@@ -212,7 +314,6 @@ else:
     
     net_bal = total_rev - total_exp
 
-    # Main Dashboard Statistics Screen
     st.markdown("### 🌐 Consolidated Family Network Balance (Account Summary view)")
     m_col1, m_col2, m_col3 = st.columns(3)
     with m_col1:
