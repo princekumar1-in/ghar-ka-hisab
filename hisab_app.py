@@ -3,7 +3,7 @@ import pandas as pd
 from datetime import datetime
 import re
 
-# 1. Page Config & Strict CSS (Logo aur watermark hatane ke liye)
+# 1. Page Config & Strict Layout CSS
 st.set_page_config(
     page_title="Financial Ledger Architecture", 
     layout="wide", 
@@ -34,7 +34,6 @@ absolute_clean_style = """
         background-color: #1e222b;
         color: white;
     }
-    /* Email link styling to look professional */
     .email-link {
         color: #ff4b4b !important;
         text-decoration: none;
@@ -53,19 +52,19 @@ absolute_clean_style = """
 """
 st.markdown(absolute_clean_style, unsafe_allow_html=True)
 
-# Password checker helper
+# Password strength criteria checker
 def check_password_strength(password):
     if len(password) < 6:
-        return False, "Password kam se kam 6 characters ka hona chahiye!"
+        return False, "Password must be at least 6 characters long!"
     if not re.search("[A-Z]", password):
-        return False, "Password me kam se kam ek CAPITAL letter hona chahiye!"
+        return False, "Password must contain at least one uppercase letter!"
     if not re.search("[0-9]", password):
-        return False, "Password me kam se kam ek Number (0-9) hona chahiye!"
+        return False, "Password must contain at least one digit!"
     if not re.search("[_@#$]", password):
-        return False, "Password me kam se kam ek Special character (_ @ # $) hona chahiye!"
+        return False, "Password must contain at least one special character (_ @ # $)!"
     return True, "Strong Password!"
 
-# 2. Database Initialization
+# 2. Database Core Realignment
 if "users_db" not in st.session_state:
     st.session_state.users_db = {
         "PRINCE": {
@@ -96,7 +95,7 @@ if "user_role" not in st.session_state:
 if "temp_user" not in st.session_state:
     st.session_state.temp_user = None
 
-# --- AUTHENTICATION INTERFACE ---
+# --- AUTHENTICATION MODULE ---
 if st.session_state.logged_in_user is None:
     st.title(" FINANCIAL LEDGER ARCHITECTURE")
     auth_mode = st.radio("Choose Action:", ["Sign In", "Create New Account / Register"], horizontal=True)
@@ -109,9 +108,16 @@ if st.session_state.logged_in_user is None:
             password_input = st.text_input("Password", type="password")
             
             if st.button("PROCEED TO VERIFICATION", use_container_width=True):
-                if username_input in st.session_state.users_db:
-                    if st.session_state.users_db[username_input]["password"] == password_input:
-                        st.session_state.temp_user = username_input
+                # Dynamic case-insensitive checking block
+                matched_user = None
+                for u in st.session_state.users_db:
+                    if u.upper() == username_input.upper():
+                        matched_user = u
+                        break
+                        
+                if matched_user:
+                    if st.session_state.users_db[matched_user]["password"] == password_input:
+                        st.session_state.temp_user = matched_user
                         st.rerun()
                     else:
                         st.error("🔒 Invalid Password. Please try again.")
@@ -176,12 +182,12 @@ if st.session_state.logged_in_user is None:
         if st.button("REGISTER & CREATE SECURE ACCOUNT", use_container_width=True):
             if not new_username or not new_password or not s_ans or not t_pin:
                 st.error("Sabhhi fields ko bharna mandatory hai!")
-            elif new_username in st.session_state.users_db:
+            elif new_username.upper() in [u.upper() for u in st.session_state.users_db]:
                 st.error("Ye username pehle se register hai!")
             elif new_password != confirm_password:
                 st.error("Passwords match nahi ho rahe hain!")
             elif not check_password_strength(new_password)[0]:
-                st.error("Kripya pehle password ko STRONG banayein!")
+                st.error("Kripya pehle password ko rules ke mutabik STRONG banayein!")
             elif not t_pin.isdigit() or len(t_pin) != 4:
                 st.error("2-Step PIN sirf 4 digits ka numeric code hona chahiye!")
             else:
@@ -196,13 +202,13 @@ if st.session_state.logged_in_user is None:
                 }
                 st.success(f"🎉 Account '{new_username}' successfully verify ho gaya hai!")
 
-# --- MAIN APP CONSOLE ---
+# --- OPERATIONAL APPLICATION CORE ---
 else:
     current_user = st.session_state.logged_in_user
     user_role = st.session_state.user_role
 
     # ==========================================
-    # SIDEBAR CONTROL PANEL
+    # SIDEBAR CONTROLLER ARCHITECTURE
     # ==========================================
     with st.sidebar:
         st.markdown("### 👤 Dashboard Controller")
@@ -221,14 +227,13 @@ else:
                 else:
                     st.error("Sahi aur strong password dalein!")
             
-            # ACCOUNT DELETION WITH DOUBLE CHECK CONFIRMATION
+            # FIXED DELETION BOX: Only simple short text in English as requested
             st.markdown("---")
             if st.checkbox("⚠️ Self Delete My Account"):
-                st.warning("Kya aap pakka apna account permanently delete karna chahte hain?")
-                # Final confirmation prompt click handler
-                if st.button("YES, PERMANENTLY DELETE MY ACCOUNT", use_container_width=True):
+                st.caption("Are you sure you want to permanently delete your account?")
+                if st.button("Yes, Confirm Deletion", use_container_width=True):
                     if current_user == "PRINCE":
-                        st.error("Main Admin (PRINCE) Account delete nahi kiya ja sakta!")
+                        st.error("Main Admin Account cannot be deleted!")
                     else:
                         del st.session_state.users_db[current_user]
                         st.session_state.logged_in_user = None
@@ -242,10 +247,11 @@ else:
             st.markdown("### 👥 Manage Family Accounts")
             
             with st.expander("➕ Add Family Member"):
-                mem_username = st.text_input("Member Username:", key="add_u")
+                mem_username = st.text_input("Member Username:", key="add_u").strip()
                 mem_password = st.text_input("Member Password:", type="password", key="add_p")
                 if st.button("Create Member Account", use_container_width=True):
                     if mem_username and mem_password:
+                        # FIXED: Member database mapping registration explicitly handled
                         st.session_state.users_db[mem_username] = {
                             "password": mem_password, 
                             "role": "User", 
@@ -254,7 +260,7 @@ else:
                             "sec_ans": "default",
                             "two_step_pin": "1234"
                         }
-                        st.success(f"Member '{mem_username}' added!")
+                        st.success(f"Member '{mem_username}' added successfully!")
                         st.rerun()
             
             with st.expander("🗑️ Delete Member Account"):
@@ -290,12 +296,9 @@ else:
 
         st.markdown("---")
         
-        # HELP & SUPPORT DIRECT MAIL SYSTEM WITH 'MAILTO' PROTOCOL
         with st.expander("✉️ Help & Support"):
             st.write("**Architecture Support Desk**")
             st.write("Click below to directly send a support email:")
-            
-            # HTML Link making it clickable for immediate redirection to default mail client
             email_html = '<a href="mailto:vermaji3216@gmail.com?subject=Ledger%20App%20Support%20Query" class="email-link">📧 Click to Mail: vermaji3216@gmail.com</a>'
             st.markdown(email_html, unsafe_allow_html=True)
 
@@ -306,7 +309,7 @@ else:
             st.rerun()
 
     # ==========================================
-    # CORE DASHBOARD AREA
+    # CENTRAL CONTROL PLATFORM
     # ==========================================
     st.title("📊 FINANCIAL LEDGER ARCHITECTURE")
     st.caption(f"Secure Session Active: **{current_user}**")
@@ -334,16 +337,25 @@ else:
     st.markdown("---")
     st.markdown("### 🔎 Select Account View")
 
+    # FIXED: Clean dropdown filtering logic for Admin vs Regular Users
     if user_role == "Admin":
-        view_choice = st.selectbox("Choose whose dashboard to view:", ["All Family Records", "My Entries Only"])
-        st.subheader(f"👤 Ledger Dashboard: {current_user if view_choice == 'My Entries Only' else 'All Members'}")
+        distinct_users = ["All Family Records", "My Entries Only"] + [u for u in st.session_state.users_db if u != "PRINCE"]
+        view_choice = st.selectbox("Choose whose dashboard to view:", distinct_users)
+        
+        st.subheader(f"👤 Ledger Dashboard: {view_choice}")
         
         if df_entries.empty:
             st.info("No records inside your dashboard yet.")
         else:
-            display_df = df_entries[df_entries["Created By"] == current_user] if view_choice == "My Entries Only" else df_entries
+            if view_choice == "All Family Records":
+                display_df = df_entries
+            elif view_choice == "My Entries Only":
+                display_df = df_entries[df_entries["Created By"] == current_user]
+            else:
+                display_df = df_entries[df_entries["Created By"] == view_choice]
+                
             if display_df.empty:
-                st.info("No records found.")
+                st.info(f"No records found for selection: {view_choice}")
             else:
                 st.dataframe(display_df, use_container_width=True)
                 
