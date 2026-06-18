@@ -108,15 +108,15 @@ if st.session_state.logged_in_user is None:
             password_input = st.text_input("Password", type="password")
             
             if st.button("PROCEED TO VERIFICATION", use_container_width=True):
-                # Dynamic case-insensitive checking block
+                # FIXED: Case-insensitive precise database match to fix "Wrong Password" bug
                 matched_user = None
                 for u in st.session_state.users_db:
-                    if u.upper() == username_input.upper():
+                    if u.strip().upper() == username_input.strip().upper():
                         matched_user = u
                         break
                         
                 if matched_user:
-                    if st.session_state.users_db[matched_user]["password"] == password_input:
+                    if str(st.session_state.users_db[matched_user]["password"]) == str(password_input):
                         st.session_state.temp_user = matched_user
                         st.rerun()
                     else:
@@ -126,12 +126,20 @@ if st.session_state.logged_in_user is None:
             
             with st.expander("🔑 Forgot Password via Security Question?"):
                 f_user = st.text_input("Enter Username:", key="f_u").strip()
-                if f_user in st.session_state.users_db:
-                    st.info(f"Question: {st.session_state.users_db[f_user]['sec_qst']}")
+                
+                # Case-insensitive check for forgot password too
+                f_matched = None
+                for u in st.session_state.users_db:
+                    if u.strip().upper() == f_user.strip().upper():
+                        f_matched = u
+                        break
+                        
+                if f_matched:
+                    st.info(f"Question: {st.session_state.users_db[f_matched]['sec_qst']}")
                     f_ans = st.text_input("Enter Answer:", key="f_a").lower().strip()
                     if st.button("Verify & Reveal Password", use_container_width=True):
-                        if f_ans == st.session_state.users_db[f_user]['sec_ans']:
-                            st.success(f"🔑 Your Password is: **{st.session_state.users_db[f_user]['password']}**")
+                        if f_ans == st.session_state.users_db[f_matched]['sec_ans']:
+                            st.success(f"🔑 Your Password is: **{st.session_state.users_db[f_matched]['password']}**")
                         else:
                             st.error("Galat Answer! Kripya sahi answer dalein.")
                 elif f_user:
@@ -144,7 +152,7 @@ if st.session_state.logged_in_user is None:
             with col_b1:
                 if st.button("VERIFY & SIGN IN", use_container_width=True):
                     target_pin = st.session_state.users_db[st.session_state.temp_user].get("two_step_pin", "1234")
-                    if pin_input == target_pin:
+                    if str(pin_input) == str(target_pin):
                         st.session_state.logged_in_user = st.session_state.temp_user
                         st.session_state.user_role = st.session_state.users_db[st.session_state.temp_user]["role"]
                         st.session_state.temp_user = None
@@ -200,7 +208,7 @@ if st.session_state.logged_in_user is None:
                     "sec_ans": s_ans,
                     "two_step_pin": t_pin
                 }
-                st.success(f"🎉 Account '{new_username}' successfully verify ho gaya hai!")
+                st.success(f"🎉 Account '{new_username}' successfully verify ho gaya hai! Ab 'Sign In' par jake login karein.")
 
 # --- OPERATIONAL APPLICATION CORE ---
 else:
@@ -227,7 +235,6 @@ else:
                 else:
                     st.error("Sahi aur strong password dalein!")
             
-            # FIXED DELETION BOX: Only simple short text in English as requested
             st.markdown("---")
             if st.checkbox("⚠️ Self Delete My Account"):
                 st.caption("Are you sure you want to permanently delete your account?")
@@ -251,14 +258,14 @@ else:
                 mem_password = st.text_input("Member Password:", type="password", key="add_p")
                 if st.button("Create Member Account", use_container_width=True):
                     if mem_username and mem_password:
-                        # FIXED: Member database mapping registration explicitly handled
+                        # FIXED: Member database entry is linked explicitly to sync with Sign-In parameters
                         st.session_state.users_db[mem_username] = {
                             "password": mem_password, 
                             "role": "User", 
                             "type": "Single",
                             "sec_qst": "What is your pet name?",
                             "sec_ans": "default",
-                            "two_step_pin": "1234"
+                            "two_step_pin": "1234" # Default 2-step PIN for created family members
                         }
                         st.success(f"Member '{mem_username}' added successfully!")
                         st.rerun()
@@ -337,7 +344,6 @@ else:
     st.markdown("---")
     st.markdown("### 🔎 Select Account View")
 
-    # FIXED: Clean dropdown filtering logic for Admin vs Regular Users
     if user_role == "Admin":
         distinct_users = ["All Family Records", "My Entries Only"] + [u for u in st.session_state.users_db if u != "PRINCE"]
         view_choice = st.selectbox("Choose whose dashboard to view:", distinct_users)
