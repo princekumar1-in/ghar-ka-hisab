@@ -3,7 +3,7 @@ import pandas as pd
 from datetime import datetime
 import re
 
-# 1. Page Config & Strict CSS Overrides (Logo, Crown, Footer ko hide karne ke liye)
+# 1. Page Config & Strict CSS (Logo aur watermark hatane ke liye)
 st.set_page_config(
     page_title="Financial Ledger Architecture", 
     layout="wide", 
@@ -18,7 +18,6 @@ absolute_clean_style = """
     .stDeployButton {display:none !important;}
     div[data-testid="stStatusWidget"] {visibility: hidden !important;}
     
-    /* Strong element hidden block */
     footer, div[data-testid="stDecoration"], .st-emotion-cache-1pxn4b9, .st-emotion-cache-12galv2 {
         display: none !important;
         visibility: hidden !important;
@@ -28,7 +27,6 @@ absolute_clean_style = """
     }
     iframe {display: none !important;}
     
-    /* Layout styling */
     [data-testid="stSidebar"] {
         background-color: #11151c;
     }
@@ -36,11 +34,26 @@ absolute_clean_style = """
         background-color: #1e222b;
         color: white;
     }
+    /* Email link styling to look professional */
+    .email-link {
+        color: #ff4b4b !important;
+        text-decoration: none;
+        font-weight: bold;
+        border: 1px solid #ff4b4b;
+        padding: 5px 10px;
+        border-radius: 5px;
+        display: inline-block;
+        margin-top: 5px;
+    }
+    .email-link:hover {
+        background-color: #ff4b4b;
+        color: white !important;
+    }
     </style>
 """
 st.markdown(absolute_clean_style, unsafe_allow_html=True)
 
-# Password validation helper function
+# Password checker helper
 def check_password_strength(password):
     if len(password) < 6:
         return False, "Password kam se kam 6 characters ka hona chahiye!"
@@ -52,7 +65,7 @@ def check_password_strength(password):
         return False, "Password me kam se kam ek Special character (_ @ # $) hona chahiye!"
     return True, "Strong Password!"
 
-# 2. Advanced In-Memory Database Initialization
+# 2. Database Initialization
 if "users_db" not in st.session_state:
     st.session_state.users_db = {
         "PRINCE": {
@@ -76,7 +89,6 @@ if "users_db" not in st.session_state:
 if "ledger_entries" not in st.session_state:
     st.session_state.ledger_entries = []
 
-# Auth state handles
 if "logged_in_user" not in st.session_state:
     st.session_state.logged_in_user = None
 if "user_role" not in st.session_state:
@@ -87,12 +99,9 @@ if "temp_user" not in st.session_state:
 # --- AUTHENTICATION INTERFACE ---
 if st.session_state.logged_in_user is None:
     st.title(" FINANCIAL LEDGER ARCHITECTURE")
-    
-    # Sign-in / Registration routing
     auth_mode = st.radio("Choose Action:", ["Sign In", "Create New Account / Register"], horizontal=True)
     st.markdown("---")
 
-    # Flow 1: Secure Login with 2-Step verification
     if auth_mode == "Sign In":
         if st.session_state.temp_user is None:
             st.subheader("🔒 Step 1: Account Login")
@@ -109,7 +118,6 @@ if st.session_state.logged_in_user is None:
                 else:
                     st.error(f"👤 User '{username_input}' not found.")
             
-            # Forgot Password via Security Question
             with st.expander("🔑 Forgot Password via Security Question?"):
                 f_user = st.text_input("Enter Username:", key="f_u").strip()
                 if f_user in st.session_state.users_db:
@@ -123,7 +131,6 @@ if st.session_state.logged_in_user is None:
                 elif f_user:
                     st.error("User not found.")
         else:
-            # Step 2: Two-step authentication code entry
             st.subheader(f"🛡️ Step 2: 2-Step Verification for {st.session_state.temp_user}")
             pin_input = st.text_input("Enter 4-Digit Security PIN", type="password", max_chars=4)
             
@@ -143,19 +150,15 @@ if st.session_state.logged_in_user is None:
                     st.session_state.temp_user = None
                     st.rerun()
 
-    # Flow 2: Register Account with strict security parameters
     else:
         st.subheader("✨ Register New Secured Account")
         new_username = st.text_input("Choose Username").strip()
         new_password = st.text_input("Choose Password", type="password")
         
-        # Security Metrics Display
         if new_password:
             is_strong, msg = check_password_strength(new_password)
-            if is_strong:
-                st.success(f"🔒 {msg}")
-            else:
-                st.warning(f"⚠️ {msg}")
+            if is_strong: st.success(f"🔒 {msg}")
+            else: st.warning(f"⚠️ {msg}")
                 
         confirm_password = st.text_input("Confirm Password", type="password")
         
@@ -178,7 +181,7 @@ if st.session_state.logged_in_user is None:
             elif new_password != confirm_password:
                 st.error("Passwords match nahi ho rahe hain!")
             elif not check_password_strength(new_password)[0]:
-                st.error("Kripya pehle password ko rules ke mutabik STRONG banayein!")
+                st.error("Kripya pehle password ko STRONG banayein!")
             elif not t_pin.isdigit() or len(t_pin) != 4:
                 st.error("2-Step PIN sirf 4 digits ka numeric code hona chahiye!")
             else:
@@ -191,7 +194,7 @@ if st.session_state.logged_in_user is None:
                     "sec_ans": s_ans,
                     "two_step_pin": t_pin
                 }
-                st.success(f"🎉 Account '{new_username}' successfully verify ho gaya hai! Kripya 'Sign In' par switch karein.")
+                st.success(f"🎉 Account '{new_username}' successfully verify ho gaya hai!")
 
 # --- MAIN APP CONSOLE ---
 else:
@@ -218,12 +221,14 @@ else:
                 else:
                     st.error("Sahi aur strong password dalein!")
             
-            # User self account deletion rule
+            # ACCOUNT DELETION WITH DOUBLE CHECK CONFIRMATION
             st.markdown("---")
             if st.checkbox("⚠️ Self Delete My Account"):
-                if st.button("CONFIRM DELETION", color="red", use_container_width=True):
+                st.warning("Kya aap pakka apna account permanently delete karna chahte hain?")
+                # Final confirmation prompt click handler
+                if st.button("YES, PERMANENTLY DELETE MY ACCOUNT", use_container_width=True):
                     if current_user == "PRINCE":
-                        st.error("Main Admin Account delete nahi kiya ja sakta!")
+                        st.error("Main Admin (PRINCE) Account delete nahi kiya ja sakta!")
                     else:
                         del st.session_state.users_db[current_user]
                         st.session_state.logged_in_user = None
@@ -261,7 +266,7 @@ else:
             
             st.markdown("---")
 
-        # Log New Entry (Universal Form Panel)
+        # Log New Entry
         st.markdown("### 📝 Log New Entry")
         entry_date = st.date_input("Transaction Date", datetime.now())
         entry_type = st.selectbox("Type", ["Expense", "Revenue"])
@@ -285,11 +290,14 @@ else:
 
         st.markdown("---")
         
-        # HELP & SUPPORT INJECTED WITH CONTACT EMAIL (As requested!)
+        # HELP & SUPPORT DIRECT MAIL SYSTEM WITH 'MAILTO' PROTOCOL
         with st.expander("✉️ Help & Support"):
             st.write("**Architecture Support Desk**")
-            st.write("For technical queries or issues contact:")
-            st.code("vermaji3216@gmail.com", language="text")
+            st.write("Click below to directly send a support email:")
+            
+            # HTML Link making it clickable for immediate redirection to default mail client
+            email_html = '<a href="mailto:vermaji3216@gmail.com?subject=Ledger%20App%20Support%20Query" class="email-link">📧 Click to Mail: vermaji3216@gmail.com</a>'
+            st.markdown(email_html, unsafe_allow_html=True)
 
         st.markdown("---")
         if st.button("🔒 SECURE SIGN OUT", use_container_width=True):
@@ -298,7 +306,7 @@ else:
             st.rerun()
 
     # ==========================================
-    # CORE FRAMEWORK VIEWPORTS
+    # CORE DASHBOARD AREA
     # ==========================================
     st.title("📊 FINANCIAL LEDGER ARCHITECTURE")
     st.caption(f"Secure Session Active: **{current_user}**")
