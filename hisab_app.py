@@ -204,7 +204,7 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-MY_EMAIL = "your-email@example.com"
+MY_EMAIL = "vermaji3216@gmail.com"
 
 if "logged_in" not in st.session_state: st.session_state["logged_in"] = False
 if "two_fa_verified" not in st.session_state: st.session_state["two_fa_verified"] = False
