@@ -204,7 +204,8 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-MY_EMAIL = "your-email@example.com"
+# Personal Secure Email Setup
+MY_EMAIL = "vermaji3216@gmail.com"
 
 if "logged_in" not in st.session_state: st.session_state["logged_in"] = False
 if "two_fa_verified" not in st.session_state: st.session_state["two_fa_verified"] = False
@@ -406,11 +407,19 @@ with menu_col2:
                         st.success("Member account activated!")
                         st.rerun()
                     else: st.error("Username already registered.")
+        
         member_list = get_sub_accounts(current_user)
+        if member_list:
+            with st.expander("🗑️ Terminate Family Node"):
+                to_delete = st.selectbox("Select Account To Wipe:", member_list)
+                if st.button("CONFIRM NODE WIPEOUT", type="primary", use_container_width=True):
+                    delete_user_account(to_delete)
+                    st.success("Account database wiped out!")
+                    st.rerun()
 
 st.markdown("---")
 
-# --- UPGRADED TRANSACTION FORM WITH CASH/BANK + DESCRIPTION NOTES ---
+# --- UPGRADED TRANSACTION FORM ---
 st.markdown("### 📝 Log New Transaction Entry")
 with st.form("entry_form", clear_on_submit=True):
     f_col1, f_col2 = st.columns(2)
@@ -480,12 +489,10 @@ if not df_user.empty:
     with col_left:
         st.subheader("📝 Live Statement Ledger Records")
         for index, row in df_filtered.sort_values(by="date", ascending=False).iterrows():
-            # Color Tagging & Text Update as requested
             tag_color = "🟩 [Income]" if row['type'] == "Income" else "🟥 [Expense]"
             method_label = "🏪 Cash" if row['payment_method'] == "Cash" else "🏦 Bank"
             entry_note = row['notes'] if row['notes'] else "No description."
             
-            # Expanded text strictly adjusted for dynamic status tags [Auto]/[Edited] & Type
             with st.expander(f"📅 {row['date'].strftime('%Y-%m-%d')} | {tag_color} | **{row['category']}** | {method_label} | **₹{row['amount']:,}** | *[{row['log_status']}]*"):
                 st.markdown(f"**📝 Notes:** *{entry_note}*")
                 
@@ -518,7 +525,6 @@ if not df_user.empty:
                         with cancel_col:
                             if st.button("Drop Token", key=f"cancel_ed_{row['id']}", use_container_width=True):
                                 st.session_state[f"show_edit_{row['id']}"] = False
-                                r_btn = st.button("Refresh View")
                                 st.rerun()
                 else:
                     st.markdown("<span style='color: #888; font-size: 0.85em;'>🔒 Member Entry (Read-Only Mode)</span>", unsafe_allow_html=True)
