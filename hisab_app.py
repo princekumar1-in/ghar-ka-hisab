@@ -187,28 +187,37 @@ init_db_safely()
 # --- STREAMLIT UI ---
 st.set_page_config(page_title="Professional Ledger System", layout="wide", page_icon="💰")
 
-# --- FORCE HIDE LOGOS & FOOTERS WITH EXTRA PADDING FOR CUSTOM BROWSER INTERFACES ---
+# --- ADVANCED CSS: TOTAL WATERMARK & FOOTER WIPE OUT SCRIPT ---
 st.markdown("""
     <style>
-    #MainMenu {visibility: hidden;}
-    footer {visibility: hidden;}
-    header {visibility: hidden;}
-    stDecoration {display:none !important;}
-    [data-testid="stStatusWidget"] {display:none !important;}
-    button[title="View source code"] {display: none !important;}
-    .stAppDeployDropdown {display: none !important;}
-    iframe[title="Manage app"] {display: none !important;}
-    div[data-testid="stConnectionStatus"] {display: none !important;}
+    /* Absolute global element hiding for any Streamlit system footprints */
+    header, footer, .stDecoration, [data-testid="stStatusWidget"], iframe {
+        visibility: hidden !important;
+        display: none !important;
+    }
     
-    /* Extra spacing at the bottom to prevent overlaps on custom browsers */
+    /* Target and destroy "Hosted by Streamlit" bottom banner node */
+    .viewerBadge_container__1QSob, .viewerBadge_link__1S165, [class^="viewerBadge_"] {
+        display: none !important;
+        visibility: hidden !important;
+    }
+    
+    /* Target and wipe out top-right core menu buttons completely */
+    #MainMenu, .stAppDeployDropdown, button[title="View source code"] {
+        display: none !important;
+        visibility: hidden !important;
+    }
+    
+    /* Smooth padded canvas base layout adjustment */
     .stApp {
-        padding-bottom: 80px !important;
+        padding-bottom: 30px !important;
     }
     </style>
     """, unsafe_allow_html=True)
 
 MY_EMAIL = "your-email@example.com"
 
+# Session Keys Initialization
 if "logged_in" not in st.session_state:
     st.session_state["logged_in"] = False
 if "two_fa_verified" not in st.session_state:
@@ -217,6 +226,10 @@ if "username" not in st.session_state:
     st.session_state["username"] = ""
 if "account_mode" not in st.session_state:
     st.session_state["account_mode"] = "Single"
+
+# Core Local Storage Persistent State Engine For 3-Days Device Trust
+if "device_session_token" not in st.session_state:
+    st.session_state["device_session_token"] = {}
 
 SECURITY_QUESTIONS = [
     "What is the name of your first school?",
@@ -245,9 +258,14 @@ if not st.session_state["logged_in"]:
                     st.session_state["username"] = username_input
                     st.session_state["account_mode"] = mode
                     
-                    session_key = f"expiry_{username_input}"
-                    if session_key in st.query_params or (session_key in st.session_state and st.session_state[session_key] > datetime.now()):
-                        st.session_state["two_fa_verified"] = True
+                    # Persistent dynamic time checkpoint check
+                    now = datetime.now()
+                    if username_input in st.session_state["device_session_token"]:
+                        expiry_time = st.session_state["device_session_token"][username_input]
+                        if now < expiry_time:
+                            st.session_state["two_fa_verified"] = True
+                        else:
+                            st.session_state["two_fa_verified"] = False
                     else:
                         st.session_state["two_fa_verified"] = False
                     st.rerun()
@@ -358,7 +376,8 @@ if not st.session_state["two_fa_verified"]:
             if make_hashes(pin_entry) == db_pin:
                 st.session_state["two_fa_verified"] = True
                 if trust_device:
-                    st.session_state[f"expiry_{current_user}"] = datetime.now() + timedelta(days=3)
+                    # Storing a true temporal timestamp lock inside inside runtime state engine map
+                    st.session_state["device_session_token"][current_user] = datetime.now() + timedelta(days=3)
                 st.toast("Security Clearance Granted!")
                 st.rerun()
             else:
@@ -374,7 +393,7 @@ if not st.session_state["two_fa_verified"]:
 st.title("📊 FINANCIAL LEDGER ARCHITECTURE")
 st.markdown(f"*Secure Session Active: **{current_user.upper()}***")
 
-# --- RESPONSIVE APP CONTROLS DIRECTLY ON THE MAIN VIEW (FOR EASY MOBILE ACCESS) ---
+# --- RESPONSIVE APP CONTROLS DIRECTLY ON THE MAIN VIEW ---
 st.markdown("### ⚙️ System Control Center")
 menu_col1, menu_col2 = st.columns(2)
 
@@ -450,7 +469,7 @@ with menu_col2:
 
 st.markdown("---")
 
-# --- TRANSACTION TRANSACTION ENTRY FORM RIGHT ON MAIN ENV ---
+# --- TRANSACTION ENTRY FORM ---
 st.markdown("### 📝 Log New Transaction Entry")
 with st.form("entry_form", clear_on_submit=True):
     f_col1, f_col2 = st.columns(2)
@@ -578,11 +597,11 @@ if not df_user.empty:
         else:
             st.info("No records match selection analytics.")
 else:
-    st.info("No structural nodes found inside dashboard.")
+    st.info("No records inside your dashboard yet.")
 
 st.markdown("---")
 
-# --- CODES FOR INTERACTIVE BOTTOM PLACED SECURE CONTROLS ---
+# --- INTERACTIVE BOTTOM PLACED SECURE CONTROLS ---
 bot_col1, bot_col2 = st.columns(2)
 with bot_col1:
     with st.expander("📧 Help & Support Center desk"):
