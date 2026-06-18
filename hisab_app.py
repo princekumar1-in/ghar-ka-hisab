@@ -3,7 +3,7 @@ import pandas as pd
 from datetime import datetime
 import re
 
-# 1. Page Config & Strict Layout CSS
+# 1. Page Config & Layout Overrides
 st.set_page_config(
     page_title="Financial Ledger Architecture", 
     layout="wide", 
@@ -64,7 +64,7 @@ def check_password_strength(password):
         return False, "Password must contain at least one special character (_ @ # $)!"
     return True, "Strong Password!"
 
-# 2. Database Core Realignment
+# 2. Permanent Core Database Init
 if "users_db" not in st.session_state:
     st.session_state.users_db = {
         "PRINCE": {
@@ -108,15 +108,15 @@ if st.session_state.logged_in_user is None:
             password_input = st.text_input("Password", type="password")
             
             if st.button("PROCEED TO VERIFICATION", use_container_width=True):
-                # FIXED: Case-insensitive precise database match to fix "Wrong Password" bug
+                # Global clean mapping check
                 matched_user = None
                 for u in st.session_state.users_db:
-                    if u.strip().upper() == username_input.strip().upper():
+                    if str(u).strip().upper() == str(username_input).strip().upper():
                         matched_user = u
                         break
                         
                 if matched_user:
-                    if str(st.session_state.users_db[matched_user]["password"]) == str(password_input):
+                    if str(st.session_state.users_db[matched_user]["password"]).strip() == str(password_input).strip():
                         st.session_state.temp_user = matched_user
                         st.rerun()
                     else:
@@ -127,7 +127,6 @@ if st.session_state.logged_in_user is None:
             with st.expander("🔑 Forgot Password via Security Question?"):
                 f_user = st.text_input("Enter Username:", key="f_u").strip()
                 
-                # Case-insensitive check for forgot password too
                 f_matched = None
                 for u in st.session_state.users_db:
                     if u.strip().upper() == f_user.strip().upper():
@@ -152,7 +151,7 @@ if st.session_state.logged_in_user is None:
             with col_b1:
                 if st.button("VERIFY & SIGN IN", use_container_width=True):
                     target_pin = st.session_state.users_db[st.session_state.temp_user].get("two_step_pin", "1234")
-                    if str(pin_input) == str(target_pin):
+                    if str(pin_input).strip() == str(target_pin).strip():
                         st.session_state.logged_in_user = st.session_state.temp_user
                         st.session_state.user_role = st.session_state.users_db[st.session_state.temp_user]["role"]
                         st.session_state.temp_user = None
@@ -201,14 +200,14 @@ if st.session_state.logged_in_user is None:
             else:
                 role = "Admin" if account_type == "Multiple Accounts (Family/Admin)" else "User"
                 st.session_state.users_db[new_username] = {
-                    "password": new_password, 
+                    "password": str(new_password).strip(), 
                     "role": role,
                     "type": "Multiple" if "Multiple" in account_type else "Single",
                     "sec_qst": s_qst,
                     "sec_ans": s_ans,
-                    "two_step_pin": t_pin
+                    "two_step_pin": str(t_pin).strip()
                 }
-                st.success(f"🎉 Account '{new_username}' successfully verify ho gaya hai! Ab 'Sign In' par jake login karein.")
+                st.success(f"🎉 Account '{new_username}' successfully verify ho gaya hai! Switch to Sign In to access.")
 
 # --- OPERATIONAL APPLICATION CORE ---
 else:
@@ -230,7 +229,7 @@ else:
                 
             if st.button("Update Password", use_container_width=True):
                 if new_pass and check_password_strength(new_pass)[0]:
-                    st.session_state.users_db[current_user]["password"] = new_pass
+                    st.session_state.users_db[current_user]["password"] = str(new_pass).strip()
                     st.success("Password Updated!")
                 else:
                     st.error("Sahi aur strong password dalein!")
@@ -253,22 +252,25 @@ else:
         if user_role == "Admin":
             st.markdown("### 👥 Manage Family Accounts")
             
+            # Form setup inside expander to secure database write streams
             with st.expander("➕ Add Family Member"):
-                mem_username = st.text_input("Member Username:", key="add_u").strip()
-                mem_password = st.text_input("Member Password:", type="password", key="add_p")
-                if st.button("Create Member Account", use_container_width=True):
-                    if mem_username and mem_password:
-                        # FIXED: Member database entry is linked explicitly to sync with Sign-In parameters
-                        st.session_state.users_db[mem_username] = {
-                            "password": mem_password, 
-                            "role": "User", 
-                            "type": "Single",
-                            "sec_qst": "What is your pet name?",
-                            "sec_ans": "default",
-                            "two_step_pin": "1234" # Default 2-step PIN for created family members
-                        }
-                        st.success(f"Member '{mem_username}' added successfully!")
-                        st.rerun()
+                with st.form("add_member_form", clear_on_submit=True):
+                    mem_username = st.text_input("Member Username:").strip()
+                    mem_password = st.text_input("Member Password:", type="password")
+                    submit_member = st.form_submit_button("Create Member Account", use_container_width=True)
+                    
+                    if submit_member:
+                        if mem_username and mem_password:
+                            st.session_state.users_db[mem_username] = {
+                                "password": str(mem_password).strip(), 
+                                "role": "User", 
+                                "type": "Single",
+                                "sec_qst": "What is your pet name?",
+                                "sec_ans": "default",
+                                "two_step_pin": "1234" # Default PIN
+                            }
+                            st.success(f"Member '{mem_username}' added successfully!")
+                            st.rerun()
             
             with st.expander("🗑️ Delete Member Account"):
                 delete_user = st.selectbox("Select account to remove:", [u for u in st.session_state.users_db if u != "PRINCE"])
