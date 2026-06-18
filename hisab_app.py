@@ -4,8 +4,7 @@ import sqlite3
 import hashlib
 from datetime import datetime
 
-# --- FINAL UNIQUE STORAGE BLOCK ---
-# Is file name se server completely naya isolated node banayega
+# --- STABLE PRODUCTION STORAGE ---
 STABLE_DB_CORE = "ledger_system_final_v1.db"
 
 def init_db_safely():
@@ -85,7 +84,6 @@ def save_transaction(username, date, t_type, category, amount, log_status):
 
 def get_user_transactions(username):
     conn = sqlite3.connect(STABLE_DB_CORE)
-    # Safely building empty dataframe if table query has issues initially
     try:
         df = pd.read_sql_query('SELECT id, date, type, category, amount, log_status FROM transactions WHERE username = ?', conn)
     except Exception:
@@ -110,12 +108,13 @@ def delete_transaction(t_id):
 
 def get_global_summary_for_admin(admin_username):
     subs = get_sub_accounts(admin_username)
-    subs.append(admin_username)
+    combined_users = list(subs)
+    combined_users.append(admin_username)
     conn = sqlite3.connect(STABLE_DB_CORE)
-    placeholders = ','.join('?' for _ in subs)
+    placeholders = ','.join('?' for _ in combined_users)
     try:
         query = f'SELECT type, amount FROM transactions WHERE username IN ({placeholders})'
-        df = pd.read_sql_query(query, conn, params=subs)
+        df = pd.read_sql_query(query, conn, params=combined_users)
     except Exception:
         df = pd.DataFrame()
     conn.close()
@@ -125,7 +124,6 @@ def get_global_summary_for_admin(admin_username):
     exp = df[df["type"] == "Expense"]["amount"].sum()
     return inc, exp, (inc - exp)
 
-# Init Fresh DB Architecture
 init_db_safely()
 
 # --- STREAMLIT UI ---
@@ -138,7 +136,6 @@ if "username" not in st.session_state:
 if "account_mode" not in st.session_state:
     st.session_state["account_mode"] = "Single"
 
-# --- AUTH SELECTION SYSTEM ---
 if not st.session_state["logged_in"]:
     st.title("🔒 SECURED LEDGER SYSTEM")
     st.markdown("---")
@@ -197,14 +194,13 @@ if not st.session_state["logged_in"]:
                         st.error("Username does not exist.")
     st.stop()
 
-# --- LIVE DASHBOARD CORE ---
+# --- MAIN SYSTEM ---
 current_user = st.session_state["username"]
 user_mode = st.session_state["account_mode"]
 
 st.title("📊 FINANCIAL LEDGER ARCHITECTURE")
 st.markdown(f"*Logged in as: **{current_user.upper()}** ({user_mode} Mode)*")
 
-# Sidebar Configuration
 st.sidebar.subheader("👤 Dashboard Controller")
 
 with st.sidebar.expander("⚙️ Account Settings"):
@@ -352,4 +348,3 @@ if st.sidebar.button("🔒 SECURE SIGN OUT", use_container_width=True):
     st.session_state["username"] = ""
     st.session_state["account_mode"] = "Single"
     st.rerun()
-    
