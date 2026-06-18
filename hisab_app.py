@@ -4,7 +4,7 @@ import sqlite3
 import hashlib
 from datetime import datetime
 
-# --- STABLE PRODUCTION STORAGE ---
+# --- PRODUCTION STORAGE ---
 STABLE_DB_CORE = "ledger_system_final_v1.db"
 
 def init_db_safely():
@@ -84,11 +84,13 @@ def save_transaction(username, date, t_type, category, amount, log_status):
 
 def get_user_transactions(username):
     conn = sqlite3.connect(STABLE_DB_CORE)
-    try:
-        df = pd.read_sql_query('SELECT id, date, type, category, amount, log_status FROM transactions WHERE username = ?', conn)
-    except Exception:
-        df = pd.DataFrame(columns=["id", "date", "type", "category", "amount", "log_status"])
+    cursor = conn.cursor()
+    cursor.execute('SELECT id, date, type, category, amount, log_status FROM transactions WHERE username = ?', (username,))
+    rows = cursor.fetchall()
     conn.close()
+    
+    # Pure clean explicit DataFrame conversion to avoid empty read issues
+    df = pd.DataFrame(rows, columns=["id", "date", "type", "category", "amount", "log_status"])
     return df
 
 def update_transaction(t_id, date, t_type, category, amount, log_status="Edited"):
