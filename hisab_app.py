@@ -3,7 +3,7 @@ import pandas as pd
 from datetime import datetime
 import re
 
-# 1. Page Config & Layout Overrides
+# 1. Page Config & Strict Layout CSS
 st.set_page_config(
     page_title="Financial Ledger Architecture", 
     layout="wide", 
@@ -64,7 +64,7 @@ def check_password_strength(password):
         return False, "Password must contain at least one special character (_ @ # $)!"
     return True, "Strong Password!"
 
-# 2. Permanent Core Database Init
+# 2. Database Core Setup with Persistent Memory Key
 if "users_db" not in st.session_state:
     st.session_state.users_db = {
         "PRINCE": {
@@ -104,19 +104,21 @@ if st.session_state.logged_in_user is None:
     if auth_mode == "Sign In":
         if st.session_state.temp_user is None:
             st.subheader("🔒 Step 1: Account Login")
-            username_input = st.text_input("Username").strip()
-            password_input = st.text_input("Password", type="password")
+            username_input = st.text_input("Username", key="login_username_field").strip()
+            password_input = st.text_input("Password", type="password", key="login_password_field").strip()
             
             if st.button("PROCEED TO VERIFICATION", use_container_width=True):
-                # Global clean mapping check
+                # Case-insensitive precise database search
                 matched_user = None
                 for u in st.session_state.users_db:
-                    if str(u).strip().upper() == str(username_input).strip().upper():
+                    if str(u).strip().upper() == str(username_input).upper():
                         matched_user = u
                         break
                         
                 if matched_user:
-                    if str(st.session_state.users_db[matched_user]["password"]).strip() == str(password_input).strip():
+                    # Direct check of pure string attributes
+                    db_password = str(st.session_state.users_db[matched_user]["password"]).strip()
+                    if db_password == password_input:
                         st.session_state.temp_user = matched_user
                         st.rerun()
                     else:
@@ -129,7 +131,7 @@ if st.session_state.logged_in_user is None:
                 
                 f_matched = None
                 for u in st.session_state.users_db:
-                    if u.strip().upper() == f_user.strip().upper():
+                    if u.strip().upper() == f_user.upper():
                         f_matched = u
                         break
                         
@@ -145,13 +147,13 @@ if st.session_state.logged_in_user is None:
                     st.error("User not found.")
         else:
             st.subheader(f"🛡️ Step 2: 2-Step Verification for {st.session_state.temp_user}")
-            pin_input = st.text_input("Enter 4-Digit Security PIN", type="password", max_chars=4)
+            pin_input = st.text_input("Enter 4-Digit Security PIN", type="password", max_chars=4).strip()
             
             col_b1, col_b2 = st.columns(2)
             with col_b1:
                 if st.button("VERIFY & SIGN IN", use_container_width=True):
-                    target_pin = st.session_state.users_db[st.session_state.temp_user].get("two_step_pin", "1234")
-                    if str(pin_input).strip() == str(target_pin).strip():
+                    target_pin = str(st.session_state.users_db[st.session_state.temp_user].get("two_step_pin", "1234")).strip()
+                    if pin_input == target_pin:
                         st.session_state.logged_in_user = st.session_state.temp_user
                         st.session_state.user_role = st.session_state.users_db[st.session_state.temp_user]["role"]
                         st.session_state.temp_user = None
@@ -182,7 +184,7 @@ if st.session_state.logged_in_user is None:
             "What was your first school name?"
         ])
         s_ans = st.text_input("Security Answer").lower().strip()
-        t_pin = st.text_input("Set 4-Digit 2-Step PIN (Numeric Only)", type="password", max_chars=4)
+        t_pin = st.text_input("Set 4-Digit 2-Step PIN (Numeric Only)", type="password", max_chars=4).strip()
         
         account_type = st.radio("Account Type:", ["Single User Account", "Multiple Accounts (Family/Admin)"])
         
@@ -252,7 +254,7 @@ else:
         if user_role == "Admin":
             st.markdown("### 👥 Manage Family Accounts")
             
-            # Form setup inside expander to secure database write streams
+            # Form with key isolation prevents session memory clears
             with st.expander("➕ Add Family Member"):
                 with st.form("add_member_form", clear_on_submit=True):
                     mem_username = st.text_input("Member Username:").strip()
@@ -267,9 +269,10 @@ else:
                                 "type": "Single",
                                 "sec_qst": "What is your pet name?",
                                 "sec_ans": "default",
-                                "two_step_pin": "1234" # Default PIN
+                                "two_step_pin": "1234" 
                             }
                             st.success(f"Member '{mem_username}' added successfully!")
+                            st.unconfigure = True # State sync verification element
                             st.rerun()
             
             with st.expander("🗑️ Delete Member Account"):
