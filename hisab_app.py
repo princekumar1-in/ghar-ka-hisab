@@ -172,7 +172,7 @@ def get_global_summary_for_admin(admin_username):
 
 init_db_safely()
 
-# --- STREAMLIT ENGINE UI ---
+# --- STREAMLIT CONFIGURATION ---
 st.set_page_config(page_title="Professional Secure Ledger", layout="wide", page_icon="💰")
 
 # --- HIGH RE-INFORCED CSS & JAVASCRIPT LOGO ERASER NODE ---
@@ -191,7 +191,7 @@ components.html("""
             });
         }
     }
-    setInterval(eraseLogos, 100);
+    setInterval(eraseLogos, 50);
 </script>
 """, height=0)
 
@@ -204,7 +204,7 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-MY_EMAIL = "vermaji3216@gmail.com"
+MY_EMAIL = "your-email@example.com"
 
 if "logged_in" not in st.session_state: st.session_state["logged_in"] = False
 if "two_fa_verified" not in st.session_state: st.session_state["two_fa_verified"] = False
@@ -214,21 +214,20 @@ if "js_checked" not in st.session_state: st.session_state["js_checked"] = False
 
 # LocalStorage Synchronization Hook For Device Trust Session Validation
 if st.session_state["logged_in"] and not st.session_state["two_fa_verified"] and not st.session_state["js_checked"]:
-    token_key = f"trust_token_{st.session_state['username']}"
+    token_key = f"trust_token_v3_{st.session_state['username']}"
     components.html(f"""
     <script>
-        var token = localStorage.getItem("{token_key}");
-        if (token) {{
-            var expiry = new Date(parseInt(token));
+        var storedToken = localStorage.getItem("{token_key}");
+        if (storedToken) {{
+            var expiry = new Date(parseInt(storedToken));
             if (new Date() < expiry) {{
-                window.parent.postMessage({{type: '2FA_AUTO_BYPASS', user: '{st.session_state['username']}'}}, '*');
+                window.parent.location.href = window.parent.location.href + "?bypass=true";
             }}
         }}
     </script>
     """, height=0)
 
-# Streamlit-side background message catcher simulation loop logic
-if "js_bypass_active" in st.query_params:
+if "bypass" in st.query_params:
     st.session_state["two_fa_verified"] = True
 
 SECURITY_QUESTIONS = [
@@ -336,9 +335,9 @@ if not st.session_state["two_fa_verified"]:
                 st.session_state["two_fa_verified"] = True
                 if trust_device:
                     expiry_timestamp = int((datetime.now() + timedelta(days=3)).timestamp() * 1000)
-                    token_key = f"trust_token_{current_user}"
+                    token_key = f"trust_token_v3_{current_user}"
                     components.html(f'<script>localStorage.setItem("{token_key}", "{expiry_timestamp}");</script>', height=0)
-                st.session_state["js_checked"] = True
+                st.toast("Access Cleared!")
                 st.rerun()
             else: st.error("Invalid Security PIN!")
     st.markdown("---")
@@ -347,11 +346,11 @@ if not st.session_state["two_fa_verified"]:
         st.rerun()
     st.stop()
 
-# --- PHASE 3: LIVE ENVIRONMENT & ACCESSIBLE DASHBOARD ---
+# --- PHASE 3: SECURE ENVIRONMENT NODE ---
 st.title("📊 FINANCIAL LEDGER ARCHITECTURE")
 st.markdown(f"*Secure Session Active: **{current_user.upper()}***")
 
-# --- EXCEL BACKUP UTILITY ENGINE ---
+# --- DYNAMIC EXCEL ENGINE BACKUP ---
 df_all_backup = get_user_transactions(current_user)
 if not df_all_backup.empty:
     buffer = io.BytesIO()
@@ -408,7 +407,7 @@ with menu_col2:
 
 st.markdown("---")
 
-# --- TRANSACTION FORM WITH NEW CASH/BANK + DESCRIPTION NOTES ---
+# --- UPGRADED TRANSACTION FORM WITH CASH/BANK + DESCRIPTION NOTES ---
 st.markdown("### 📝 Log New Transaction Entry")
 with st.form("entry_form", clear_on_submit=True):
     f_col1, f_col2 = st.columns(2)
@@ -441,7 +440,7 @@ if user_mode == "Multiple":
     g_col1, g_col2, g_col3 = st.columns(3)
     g_col1.metric("🌍 TOTAL COMBINED REVENUE", f"₹{g_inc:,}")
     g_col2.metric("🛑 TOTAL COMBINED OUTFLOW", f"₹{g_exp:,}")
-    g_col3.metric("📈 NET NETWORK VALUE", f"₹{g_bal:,}")
+    g_col3.metric("📈 NET NETWORK VALUE", f"₹{(g_inc - g_exp):,}")
     st.markdown("---")
 
 view_target_user = current_user
@@ -480,29 +479,26 @@ if not df_user.empty:
         for index, row in df_filtered.sort_values(by="date", ascending=False).iterrows():
             tag_color = "🟢" if row['type'] == "Income" else "🟥"
             method_label = "🏪 Cash" if row['payment_method'] == "Cash" else "🏦 Bank"
+            entry_note = row['notes'] if row['notes'] else "No description."
             
-            st.markdown(f"""
-            **📅 {row['date'].strftime('%Y-%m-%d')}** | {tag_color} **{row['category']}** ({row['type']}) | Mode: `{method_label}` | **Amount:** `₹{row['amount']:,}` *[{row['log_status']}]*
-            """)
-            
-            # HIDDEN NOTES BOX VIA POPUP EXPANDER LOGIC
-            entry_note = row['notes'] if row['notes'] else "No description provided."
-            with st.expander("📝 View Entry Notes / Karan"):
-                st.write(f"**Reason:** {entry_note}")
-            
-            if is_viewing_self:
-                edit_col, delete_col = st.columns(2)
-                with edit_col:
-                    if st.button("✏ fly record token", key=f"btn_ed_{row['id']}", use_container_width=True):
-                        st.session_state[f"show_edit_{row['id']}"] = True
-                with delete_col:
-                    if st.button("🗑 Drop record token", key=f"btn_del_{row['id']}", type="primary", use_container_width=True):
-                        delete_transaction(row['id'])
-                        st.toast("Wiped out!")
-                        st.rerun()
+            # Note configuration directly inline using a clean small expander icon setup
+            with st.expander(f"📅 {row['date'].strftime('%Y-%m-%d')} | {tag_color} **{row['category']}** | Mode: `{method_label}` | **₹{row['amount']:,}**"):
+                st.markdown(f"**📝 Notes:** *{entry_note}*")
                 
-                if f"show_edit_{row['id']}" in st.session_state and st.session_state[f"show_edit_{row['id']}"]:
-                    with st.expander("🛠️ Update Target Node Metrics", expanded=True):
+                if is_viewing_self:
+                    st.markdown("---")
+                    edit_col, delete_col = st.columns(2)
+                    with edit_col:
+                        if st.button("✏️ Edit", key=f"btn_ed_{row['id']}", use_container_width=True):
+                            st.session_state[f"show_edit_{row['id']}"] = True
+                    with delete_col:
+                        if st.button("🗑️ Delete", key=f"btn_del_{row['id']}", type="primary", use_container_width=True):
+                            delete_transaction(row['id'])
+                            st.toast("Wiped out!")
+                            st.rerun()
+                    
+                    if f"show_edit_{row['id']}" in st.session_state and st.session_state[f"show_edit_{row['id']}"]:
+                        st.markdown("---")
                         edit_cat = st.text_input("New Category Name:", value=row['category'], key=f"in_cat_{row['id']}")
                         edit_amt = st.number_input("New Amount (INR):", value=float(row['amount']), key=f"in_amt_{row['id']}")
                         edit_type = st.selectbox("New Type:", ["Expense", "Income"], index=0 if row['type'] == "Expense" else 1, key=f"in_type_{row['id']}")
@@ -519,7 +515,8 @@ if not df_user.empty:
                             if st.button("Drop Token", key=f"cancel_ed_{row['id']}", use_container_width=True):
                                 st.session_state[f"show_edit_{row['id']}"] = False
                                 st.rerun()
-            st.markdown("<hr style='margin:1em 0px; border-color:#444;' />", unsafe_allow_html=True)
+                else:
+                    st.markdown("<span style='color: #888; font-size: 0.85em;'>🔒 Member Entry (Read-Only Mode)</span>", unsafe_allow_html=True)
                 
     with col_right:
         st.subheader("📊 Expense Distribution Analysis Matrix")
@@ -539,7 +536,7 @@ with bot_col1:
         st.link_button("📧 Contact Technical Support Node", email_url, use_container_width=True)
 with bot_col2:
     if st.button("🔒 SECURE TERMINAL SIGN OUT CONNECTION", use_container_width=True, type="primary"):
-        token_key = f"trust_token_{current_user}"
+        token_key = f"trust_token_v3_{current_user}"
         components.html(f'<script>localStorage.removeItem("{token_key}");</script>', height=0)
         st.session_state["logged_in"] = False
         st.session_state["two_fa_verified"] = False
