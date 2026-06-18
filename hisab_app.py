@@ -5,34 +5,35 @@ import sqlite3
 import hashlib
 from datetime import datetime
 
-# --- DATABASE SETUP ---
-DB_FILE = "users_db.db"
-DATA_FOLDER = "User_Data"
+# --- DATABASE & FOLDER CONFIG ---
+DB_FILE = "system_database.db"
+DATA_FOLDER = "User_Ledgers"
 
 if not os.path.exists(DATA_FOLDER):
     os.makedirs(DATA_FOLDER)
 
+# --- SQLITE CORE DATABASE OPERATIONS ---
 def init_db():
     conn = sqlite3.connect(DB_FILE)
     c = conn.cursor()
+    # Users Table
     c.execute('''CREATE TABLE IF NOT EXISTS users 
-                 (username TEXT PRIMARY KEY, password TEXT)''')
+                 (username TEXT PRIMARY KEY, password TEXT, account_mode TEXT, created_by TEXT)''')
+    # Transactions Table (For Permanent Storage)
+    c.execute('''CREATE TABLE IF NOT EXISTS transactions 
+                 (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT, date TEXT, type TEXT, category TEXT, amount REAL)''')
     conn.commit()
     conn.close()
 
 def make_hashes(password):
     return hashlib.sha256(str.encode(password)).hexdigest()
 
-def check_hashes(password, hashed_password):
-    if make_hashes(password) == hashed_password:
-        return True
-    return False
-
-def add_user(username, password):
+def add_user(username, password, account_mode, created_by="self"):
     conn = sqlite3.connect(DB_FILE)
     c = conn.cursor()
     try:
-        c.execute('INSERT INTO users(username, password) VALUES (?,?)', (username, make_hashes(password)))
+        c.execute('INSERT INTO users(username, password, account_mode, created_by) VALUES (?,?,?,?)', 
+                  (username, make_hashes(password), account_mode, created_by))
         conn.commit()
         return True
     except sqlite3.IntegrityError:
@@ -43,143 +44,265 @@ def add_user(username, password):
 def login_user(username, password):
     conn = sqlite3.connect(DB_FILE)
     c = conn.cursor()
-    c.execute('SELECT password FROM users WHERE username = ?', (username,))
+    c.execute('SELECT password, account_mode FROM users WHERE username = ?', (username,))
     data = c.fetchone()
     conn.close()
     if data:
-        return check_hashes(password, data[0])
-    return False
+        return hashlib.sha256(str.encode(password)).hexdigest() == data[0], data[1]
+    return False, None
 
+def get_sub_accounts(admin_username):
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    c.execute('SELECT username FROM users WHERE created_by = ?', (admin_username,))
+    data = c.fetchall()
+    conn.close()
+    return [row[0] for row in data]
+
+def delete_user_account(username):
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    c.execute('DELETE FROM users WHERE username = ?', (username,))
+    c.execute('DELETE FROM transactions WHERE username = ?', (username,))
+    conn.commit()
+    conn.close()
+
+# --- TRANSACTION FUNCTIONS (EDIT / DELETE / FETCH) ---
+def save_transaction(username, date, t_type, category, amount):
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    c.execute('INSERT INTO transactions(username, date, type, category, amount) VALUES (?,?,?,?,?)',
+              (username, date, t_type, category, amount))
+    conn.commit()
+    conn.close()
+
+def get_user_transactions(username):
+    conn = sqlite3.connect(DB_FILE)
+    df = pd.read_sql_query('SELECT id, date, type, category, amount FROM transactions WHERE username = ?', conn)
+    conn.close()
+    return df
+
+def update_transaction(t_id, date, t_type, category, amount):
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    c.execute('UPDATE transactions SET date=?, type=?, category=?, amount=? WHERE id=?', (date, t_type, category, amount, t_id))
+    conn.commit()
+    conn.close()
+
+def delete_transaction(t_id):
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    c.execute('DELETE FROM transactions WHERE id = ?', (t_id,))
+    conn.commit()
+    conn.close()
+
+def get_global_summary_for_admin(admin_username):
+    # Admin gets total metrics of all sub-accounts created by him without seeing details
+    subs = get_sub_accounts(admin_username)
+    subs.append(admin_username) # Include admin's own
+    
+    conn = sqlite3.connect(DB_FILE)
+    placeholders = ','.join('?' for _ in subs)
+    query = f'SELECT type, amount FROM transactions WHERE username IN ({placeholders})'
+    df = pd.read_sql_query(query, conn, params=subs)
+    conn.close()
+    
+    if df.empty:
+        return 0, 0, 0
+    inc = df[df["type"] == "Income"]["amount"].sum()
+    exp = df[df["type"] == "Expense"]["amount"].sum()
+    return inc, exp, (inc - exp)
+
+# Start Database
 init_db()
 
-# --- PAGE CONFIG ---
-st.set_page_config(page_title="Personal Ledger Pro", layout="wide", page_icon="💰")
+# --- STREAMLIT UI ---
+st.set_page_config(page_title="Professional Ledger System", layout="wide", page_icon="💰")
 
 if "logged_in" not in st.session_state:
     st.session_state["logged_in"] = False
 if "username" not in st.session_state:
     st.session_state["username"] = ""
+if "account_mode" not in st.session_state:
+    st.session_state["account_mode"] = "Single"
 
-# --- AUTHENTICATION UI ---
+# --- LOGIN / REGISTER CONTROL ---
 if not st.session_state["logged_in"]:
     st.title("🔒 SECURED LEDGER SYSTEM")
     st.markdown("---")
     
-    auth_choice = st.radio("Select Action:", ["Sign In", "Create Account"], horizontal=True)
-    
+    auth_choice = st.radio("Select Action:", ["Sign In", "Create Master Account"], horizontal=True)
     col1, _ = st.columns([1, 2])
     
     with col1:
         if auth_choice == "Sign In":
             st.subheader("🔑 Sign In")
-            username = st.text_input("Username:").strip()
-            password = st.text_input("Password:", type="password")
+            username_input = st.text_input("Username:").strip().lower()
+            password_input = st.text_input("Password:", type="password")
             if st.button("SIGN IN", use_container_width=True):
-                if login_user(username, password):
+                success, mode = login_user(username_input, password_input)
+                if success:
                     st.session_state["logged_in"] = True
-                    st.session_state["username"] = username
-                    st.toast(f"Welcome back! 👋")
+                    st.session_state["username"] = username_input
+                    st.session_state["account_mode"] = mode
+                    st.toast("Access Granted Successfully!")
                     st.rerun()
                 else:
-                    st.error("Invalid Username or Password")
+                    st.error("Invalid credentials.")
                     
-        elif auth_choice == "Create Account":
-            st.subheader("📝 Register New Account")
-            new_user = st.text_input("Choose Username:").strip()
+        elif auth_choice == "Create Master Account":
+            st.subheader("📝 Register Master Admin")
+            new_user = st.text_input("Choose Username:").strip().lower()
             new_password = st.text_input("Create Password:", type="password")
-            confirm_password = st.text_input("Confirm Password:", type="password")
+            
+            # FIRST TIME MODE SELECTION
+            mode_selection = st.selectbox("Account Usage Mode:", ["Single User Mode", "Multiple Accounts Mode (Family/Team)"])
+            selected_mode = "Single" if "Single" in mode_selection else "Multiple"
             
             if st.button("REGISTER NOW", use_container_width=True):
                 if not new_user or not new_password:
                     st.error("Fields cannot be empty!")
-                elif new_password != confirm_password:
-                    st.error("Passwords do not match!")
                 else:
-                    if add_user(new_user, new_password):
-                        st.success("Account created successfully! Please switch to 'Sign In' tab.")
+                    if add_user(new_user, new_password, selected_mode, "self"):
+                        st.success("Master account deployed! Now please Switch to 'Sign In'.")
                     else:
-                        st.error("Username already exists! Choose another.")
-                        
+                        st.error("Username already taken!")
     st.stop()
 
-# --- MAIN APP LOGIC ---
+# --- MAIN DASHBOARD CONTROL SYSTEM ---
 current_user = st.session_state["username"]
-st.title(f"📊 FINANCIAL DASHBOARD")
+user_mode = st.session_state["account_mode"]
 
-USER_DATA_FILE = os.path.join(DATA_FOLDER, f"ledger_{current_user}.csv")
+st.title("📊 FINANCIAL LEDGER ARCHITECTURE")
+st.markdown(f"*Logged in as: **{current_user.upper()}** ({user_mode} Mode)*")
 
-if not os.path.exists(USER_DATA_FILE):
-    df = pd.DataFrame(columns=["Date", "Type", "Category", "Amount"])
-    df.to_csv(USER_DATA_FILE, index=False)
+# --- SIDEBAR CONTROLS ---
+st.sidebar.subheader(f"👤 Dashboard Controller")
 
-# --- SIDEBAR: ENTRY FORM ---
-st.sidebar.subheader(f"👤 Active User: {current_user.title()}")
+# Admin Management Panel (Only displays if Multi-Account mode is enabled)
+if user_mode == "Multiple":
+    st.sidebar.markdown("---")
+    st.sidebar.markdown("**👥 Manage Family Accounts**")
+    
+    # Create Sub-Account Form
+    with st.sidebar.expander("➕ Add Family Member"):
+        sub_name = st.text_input("Member Username:").strip().lower()
+        sub_pass = st.text_input("Member Password:", type="password")
+        if st.button("Create Member Account"):
+            if sub_name and sub_pass:
+                if add_user(sub_name, sub_pass, "Single", current_user):
+                    st.success(f"Account for '{sub_name}' active!")
+                else:
+                    st.error("Member name already exists.")
+                    
+    # Delete Sub-Account Control
+    member_list = get_sub_accounts(current_user)
+    if member_list:
+        with st.sidebar.expander("🗑️ Delete Member Account"):
+            to_delete = st.selectbox("Select Account:", member_list)
+            if st.button("CONFIRM DELETE ACCOUNT", type="primary"):
+                delete_user_account(to_delete)
+                st.success("Account wiped out successfully!")
+                st.rerun()
+
+# --- TRANSACTION ENTRY SYSTEM (SIDEBAR FORM) ---
+st.sidebar.markdown("---")
+st.sidebar.markdown("**📝 Log New Entry**")
 with st.sidebar.form("entry_form", clear_on_submit=True):
     date_input = st.date_input("Transaction Date", datetime.now())
-    type_input = st.selectbox("Transaction Type", ["Expense", "Income"])
-    category_input = st.text_input("Category / Particulars", placeholder="e.g., Fuel, Market, Seeds")
-    amount_input = st.number_input("Amount (INR)", min_value=1, step=1)
-    submit_btn = st.form_submit_button("SAVE TRANSACTION", use_container_width=True)
+    type_input = st.selectbox("Type", ["Expense", "Income"])
+    category_input = st.text_input("Category / Particulars", placeholder="Diesel, Crop Sale, Grocery")
+    amount_input = st.number_input("Amount (INR)", min_value=1.0, step=1.0)
+    submit_btn = st.form_submit_button("COMMIT TRANSACTION", use_container_width=True)
 
 if submit_btn:
     if not category_input.strip():
-        st.sidebar.error("Please enter a valid category name!")
+        st.sidebar.error("Valid label designation required.")
     else:
-        clean_category = category_input.strip().title()
-        new_data = pd.DataFrame([[date_input, type_input, clean_category, amount_input]], 
-                                columns=["Date", "Type", "Category", "Amount"])
-        new_data.to_csv(USER_DATA_FILE, mode='a', header=False, index=False)
-        st.toast(f"Saved: {clean_category} - ₹{amount_input}", icon="✅")
+        save_transaction(current_user, date_input.strftime('%Y-%m-%d'), type_input, category_input.strip().title(), amount_input)
+        st.toast("Transaction logged permanently!", icon="✅")
         st.rerun()
 
-# --- MAIN DASHBOARD DATA ---
-df_load = pd.read_csv(USER_DATA_FILE)
+# --- METRICS CALCULATIONS & VISUALIZATION ---
+df_user = get_user_transactions(current_user)
 
-if not df_load.empty:
-    df_load["Date"] = pd.to_datetime(df_load["Date"])
-    df_load["Month"] = df_load["Date"].dt.strftime('%B %Y')
+# Main Global Summary Row for Master Admin Control
+if user_mode == "Multiple":
+    st.subheader("🌐 Consolidated Family Network Balance (Admin Summary view)")
+    g_inc, g_exp, g_bal = get_global_summary_for_admin(current_user)
+    g_col1, g_col2, g_col3 = st.columns(3)
+    g_col1.metric("🌍 TOTAL COMBINED REVENUE", f"₹{g_inc:,}")
+    g_col2.metric("🛑 TOTAL COMBINED OUTFLOW", f"₹{g_exp:,}")
+    g_col3.metric("📈 NET NETWORK VALUE", f"₹{g_bal:,}")
+    st.markdown("---")
+
+st.subheader("👤 Your Personal Secure Ledger Dashboard")
+if not df_user.empty:
+    df_user["date"] = pd.to_datetime(df_user["date"])
+    df_user["Month"] = df_user["date"].dt.strftime('%B %Y')
     
-    all_months = df_load["Month"].unique()
-    selected_month = st.selectbox("📅 Select Billing Month:", all_months)
+    all_months = df_user["Month"].unique()
+    selected_month = st.selectbox("Select Display Billing Month:", all_months)
     
-    df_filtered = df_load[df_load["Month"] == selected_month].copy()
+    df_filtered = df_user[df_user["Month"] == selected_month].copy()
     
-    # Calculations
-    total_income = df_filtered[df_filtered["Type"] == "Income"]["Amount"].sum()
-    total_expense = df_filtered[df_filtered["Type"] == "Expense"]["Amount"].sum()
-    net_balance = total_income - total_expense
+    # Personal Calculations
+    my_inc = df_filtered[df_filtered["type"] == "Income"]["amount"].sum()
+    my_exp = df_filtered[df_filtered["type"] == "Expense"]["amount"].sum()
+    my_bal = my_inc - my_exp
     
-    # --- METRIC CARDS ---
     col1, col2, col3 = st.columns(3)
-    col1.metric("🟩 TOTAL INCOME", f"₹{total_income:,}")
-    col2.metric("🟥 TOTAL EXPENSE", f"₹{total_expense:,}")
-    col3.metric("🟦 NET SAVINGS", f"₹{net_balance:,}")
+    col1.metric("🟩 YOUR INCOME", f"₹{my_inc:,}")
+    col2.metric("🟥 YOUR EXPENSE", f"₹{my_exp:,}")
+    col3.metric("🟦 YOUR NET BALANCE", f"₹{my_bal:,}")
     
     st.markdown("---")
     
-    # --- DATA TABLES & CHARTS ---
     col_left, col_right = st.columns(2)
     
     with col_left:
-        st.subheader("📝 Monthly Statements")
-        df_display = df_filtered[["Date", "Type", "Category", "Amount"]].copy()
-        df_display["Date"] = df_display["Date"].dt.strftime('%Y-%m-%d')
-        st.dataframe(df_display.sort_values(by="Date", ascending=False), use_container_width=True, hide_index=True)
-        
+        st.subheader("📝 Live Statement Ledger")
+        # Displaying with interactive edit/delete options
+        for index, row in df_filtered.sort_values(by="date", ascending=False).iterrows():
+            with st.container():
+                c1, c2, c3, c4 = st.columns([2, 3, 2, 2])
+                c1.write(f"📅 {row['date'].strftime('%Y-%m-%d')}")
+                c2.write(f"**{row['category']}** ({row['type']})")
+                c3.write(f"₹{row['amount']:,}")
+                
+                # Inline Editing & Deleting Controllers
+                expander = c4.expander("✏️ Actions")
+                with expander:
+                    new_cat = st.text_input("Edit Category:", value=row['category'], key=f"cat_{row['id']}")
+                    new_amt = st.number_input("Edit Amount:", value=float(row['amount']), key=f"amt_{row['id']}")
+                    new_type = st.selectbox("Edit Type:", ["Expense", "Income"], index=0 if row['type'] == "Expense" else 1, key=f"type_{row['id']}")
+                    
+                    if st.button("Update Entry", key=f"up_{row['id']}", use_container_width=True):
+                        update_transaction(row['id'], row['date'].strftime('%Y-%m-%d'), new_type, new_cat.title(), new_amt)
+                        st.toast("Entry modified!")
+                        st.rerun()
+                        
+                    if st.button("🗑️ Delete Entry", key=f"del_{row['id']}", type="primary", use_container_width=True):
+                        delete_transaction(row['id'])
+                        st.toast("Entry wiped out!")
+                        st.rerun()
+                st.markdown("<hr style='margin:0.5em 0px; border-color:#333;' />", unsafe_allow_html=True)
+                
     with col_right:
-        st.subheader("🍩 Expense Distribution")
-        exp_df = df_filtered[df_filtered["Type"] == "Expense"]
+        st.subheader("📊 Expense Distribution Analysis")
+        exp_df = df_filtered[df_filtered["type"] == "Expense"]
         if not exp_df.empty:
-            cat_totals = exp_df.groupby("Category")["Amount"].sum().reset_index()
-            st.bar_chart(data=cat_totals, x="Category", y="Amount", color="#ff4b4b", use_container_width=True)
+            cat_totals = exp_df.groupby("category")["amount"].sum().reset_index()
+            st.bar_chart(data=cat_totals, x="category", y="amount", color="#ff4b4b", use_container_width=True)
         else:
-            st.info("No expenses recorded for this month.")
+            st.info("No localized expenses found for this selection frame.")
 else:
-    st.info("No historical data available. Use the sidebar menu to log your first transaction.")
+    st.info("No dynamic records locked inside your private node yet.")
 
-# --- LOGOUT BUTTON ---
+# --- LOGOUT ---
 st.sidebar.markdown("---")
-if st.sidebar.button("🔒 SECURE LOGOUT", use_container_width=True):
+if st.sidebar.button("🔒 SECURE SIGN OUT", use_container_width=True):
     st.session_state["logged_in"] = False
     st.session_state["username"] = ""
+    st.session_state["account_mode"] = "Single"
     st.rerun()
