@@ -232,7 +232,7 @@ SECURITY_QUESTIONS = [
 if not st.session_state["logged_in"]:
     st.title("🔒 SECURED LEDGER SYSTEM")
     st.markdown("---")
-    auth_choice = st.radio("Select Action:", ["Sign In", "Create Master Account", "Forget Password"], horizontal=True)
+    auth_choice = st.radio("Select Action:", ["Sign In", "Create new Account", "Forget Password"], horizontal=True)
     col1, _ = st.columns([1, 2])
     
     with col1:
@@ -249,7 +249,7 @@ if not st.session_state["logged_in"]:
                     st.rerun()
                 else: st.error("Invalid credentials.")
                     
-        elif auth_choice == "Create Master Account":
+        elif auth_choice == "Createn new Account":
             st.subheader("📝 Register Master Admin")
             new_user = st.text_input("Choose Unique Username:").strip().lower()
             new_password = st.text_input("Create Strong Password:", type="password")
