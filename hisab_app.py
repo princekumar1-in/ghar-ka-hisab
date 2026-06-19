@@ -550,8 +550,8 @@ else:
         bot_col1, bot_col2 = st.columns(2)
         with bot_col1:
             with st.expander("📧 Help & Support Center desk", expanded=True):
-                 st.markdown(f"Any Problem Please Contact Us:")
-    st.info(f"📩 **{MY_EMAIL}**")
+                 st.markdown("Any Problem Please Contact Us:")
+        st.info(f"📩 **{MY_EMAIL}**")
         with bot_col2:
             if st.button("🔒 SECURE TERMINAL SIGN OUT CONNECTION", use_container_width=True, type="primary"):
                 st.session_state["logged_in"] = False
