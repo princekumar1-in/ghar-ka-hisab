@@ -288,8 +288,8 @@ if not st.session_state["logged_in"]:
                 
     st.markdown("---")
     with st.expander("📧 Need Help / Report Problem?", expanded=True):
-        email_url = f"mailto:{MY_EMAIL}?subject=Ledger%20App%20Support%20Request"
-        st.link_button("📧 Send Email Support", email_url, use_container_width=True, type="secondary")
+         st.markdown(f"Any Problem Please Contact Us:")
+    st.info(f"📩 **{MY_EMAIL}**")
 
 else:
     # --- PHASE 2: SECURITY SETUP / CHECKPOINT ---
@@ -550,8 +550,8 @@ else:
         bot_col1, bot_col2 = st.columns(2)
         with bot_col1:
             with st.expander("📧 Help & Support Center desk", expanded=True):
-                email_url = f"mailto:{MY_EMAIL}?subject=Ledger%20Internal%20Support"
-                st.link_button("📧 Contact Technical Support Node", email_url, use_container_width=True)
+                 st.markdown(f"Any Problem Please Contact Us:")
+    st.info(f"📩 **{MY_EMAIL}**")
         with bot_col2:
             if st.button("🔒 SECURE TERMINAL SIGN OUT CONNECTION", use_container_width=True, type="primary"):
                 st.session_state["logged_in"] = False
