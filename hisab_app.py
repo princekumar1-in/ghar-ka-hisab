@@ -286,10 +286,9 @@ if not st.session_state["logged_in"]:
             elif reset_user:
                 st.error("Username not found.")
                 
-    st.markdown("---")
-    with st.expander("📧 Need Help / Report Problem?", expanded=True):
-         st.markdown(f"Any Problem Please Contact Us:")
-    st.info(f"📩 **{MY_EMAIL}**")
+     st.markdown("---")
+    st.markdown("### 📧 Support & Help")
+    st.info(f"Any Problem Please Contact Us:\n\n📩 **{MY_EMAIL}**")
 
 else:
     # --- PHASE 2: SECURITY SETUP / CHECKPOINT ---
@@ -547,11 +546,10 @@ else:
 
         st.markdown("---")
 
+                st.markdown("---")
         bot_col1, bot_col2 = st.columns(2)
         with bot_col1:
-            with st.expander("📧 Help & Support Center desk", expanded=True):
-                 st.markdown("Any Problem Please Contact Us:")
-        st.info(f"📩 **{MY_EMAIL}**")
+            st.info(f"📧 **Help & Support Center**\n\nAny Problem Please Contact Us: **{MY_EMAIL}**")
         with bot_col2:
             if st.button("🔒 SECURE TERMINAL SIGN OUT CONNECTION", use_container_width=True, type="primary"):
                 st.session_state["logged_in"] = False
