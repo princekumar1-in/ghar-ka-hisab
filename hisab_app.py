@@ -285,10 +285,6 @@ if not st.session_state["logged_in"]:
                         else: st.error("Incorrect answer!")
             elif reset_user:
                 st.error("Username not found.")
-                
-     st.markdown("---")
-    st.markdown("### 📧 Support & Help")
-    st.info(f"Any Problem Please Contact Us:\n\n📩 **{MY_EMAIL}**")
 
 else:
     # --- PHASE 2: SECURITY SETUP / CHECKPOINT ---
