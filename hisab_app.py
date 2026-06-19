@@ -249,7 +249,7 @@ if not st.session_state["logged_in"]:
                     st.rerun()
                 else: st.error("Invalid credentials.")
                     
-        elif auth_choice == "Createn new Account":
+        elif auth_choice == "Create new Account":
             st.subheader("📝 Register Master Admin")
             new_user = st.text_input("Choose Unique Username:").strip().lower()
             new_password = st.text_input("Create Strong Password:", type="password")
