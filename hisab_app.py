@@ -500,7 +500,7 @@ else:
                     method_label = "🏪 Cash" if row['payment_method'] == "Cash" else "🏦 Bank"
                     entry_note = row['notes'] if row['notes'] else "No description."
                     
-                    with st.expander(f"📅 {row['date'].strftime('%Y-%m-%d')} | {tag_color} | **{row['category']}** | {method_label} | **₹{row['amount']:,}** | *[{row['log_status']}]*"):
+                    with st.expander(f"🕒 {row['date'].strftime('%Y-%m-%d')} | {tag_color} | **{row['category']}** | {method_label} | **₹{row['amount']:,}** | *[{row['log_status']}]*"):
                         st.markdown(f"**📝 Notes:** *{entry_note}*")
                         
                         if is_viewing_self:
