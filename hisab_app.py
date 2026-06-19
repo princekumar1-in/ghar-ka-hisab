@@ -435,7 +435,7 @@ with st.form("entry_form", clear_on_submit=True):
     with f_col2:
         category_input = st.text_input("Category / Particulars Label", value="") 
         amount_input = st.number_input("Amount (INR)", min_value=1.0, step=1.0)
-        notes_input = st.text_area("Add Description / Note (Karan)", value="")
+        notes_input = st.text_area("Add Description / Note ", value="")
         
     submit_btn = st.form_submit_button("COMMIT SECURE TRANSACTION RECORD", use_container_width=True)
 
