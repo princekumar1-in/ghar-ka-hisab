@@ -417,7 +417,7 @@ with menu_col2:
         if member_list:
             with st.expander("🗑️ Delete Member Account"):
                 to_delete = st.selectbox("Select Account To Delete:", member_list)
-                if st.button("CONFIRM NODE WIPEOUT", type="primary", use_container_width=True):
+                if st.button("CONFIRM Delete Account", type="primary", use_container_width=True):
                     delete_user_account(to_delete)
                     st.success("Account database wiped out!")
                     st.rerun()
