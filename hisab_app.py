@@ -417,9 +417,9 @@ else:
                 
                 member_list = get_sub_accounts(current_user)
                 if member_list:
-                    with st.expander("🗑️ Terminate Family Node"):
+                    with st.expander("🗑️ Terminate mamber"):
                         to_delete = st.selectbox("Select Account To Wipe:", member_list)
-                        if st.button("CONFIRM NODE WIPEOUT", type="primary", use_container_width=True):
+                        if st.button("CONFIRM mamber delete", type="primary", use_container_width=True):
                             delete_user_account(to_delete)
                             st.success("Account database wiped out!")
                             st.rerun()
