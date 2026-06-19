@@ -197,10 +197,23 @@ components.html("""
 
 st.markdown("""
     <style>
+    /* 1. Global Elements Hard Eraser */
     header, footer, .stDecoration, [data-testid="stStatusWidget"] { visibility: hidden !important; display: none !important; }
     #MainMenu, .stAppDeployDropdown, button[title="View source code"] { display: none !important; }
     .stApp { padding-bottom: 30px !important; overscroll-behavior-y: contain !important; }
     div[data-testid="stConnectionStatus"] { display: none !important; }
+    
+    /* 2. Streamlit Dynamic Branding Watermark Cleaner */
+    [class^="viewerBadge_"], [class*="viewerBadge"], [data-testid="stViewerBadge"] {
+        display: none !important;
+        visibility: hidden !important;
+    }
+    
+    /* 3. Skeleton Loading Frame Overwrite */
+    [data-testid="stSkeleton"] {
+        background-color: #ffffff !important;
+        opacity: 0 !important;
+    }
     </style>
 """, unsafe_allow_html=True)
 
@@ -435,7 +448,7 @@ with st.form("entry_form", clear_on_submit=True):
     with f_col2:
         category_input = st.text_input("Category / Particulars Label", value="") 
         amount_input = st.number_input("Amount (INR)", min_value=1.0, step=1.0)
-        notes_input = st.text_area("Add Description / Note ", value="")
+        notes_input = st.text_area("Add Description / Note (Karan)", value="")
         
     submit_btn = st.form_submit_button("COMMIT SECURE TRANSACTION RECORD", use_container_width=True)
 
