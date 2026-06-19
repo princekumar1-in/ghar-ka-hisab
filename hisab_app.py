@@ -406,7 +406,7 @@ else:
                 with st.expander("👥 Family Account Registry"):
                     sub_name = st.text_input("Member Username:", key="sub_name_reg").strip().lower()
                     sub_pass = st.text_input("Member Password:", type="password", key="sub_pass_reg")
-                    if st.button("Deploy Member Node", use_container_width=True):
+                    if st.button("Add new Member ", use_container_width=True):
                         is_strong, pass_msg = is_password_strong(sub_pass)
                         if sub_name and sub_pass:
                             if not is_strong: st.error(pass_msg)
