@@ -401,10 +401,10 @@ with menu_col1:
 member_list = []
 with menu_col2:
     if user_mode == "Multiple":
-        with st.expander("👥 Family Account Registry"):
+        with st.expander("👥 Members Account Registry"):
             sub_name = st.text_input("Member Username:", key="sub_name_reg").strip().lower()
             sub_pass = st.text_input("Member Password:", type="password", key="sub_pass_reg")
-            if st.button("Deploy Member Node", use_container_width=True):
+            if st.button("Add Member", use_container_width=True):
                 is_strong, pass_msg = is_password_strong(sub_pass)
                 if sub_name and sub_pass:
                     if not is_strong: st.error(pass_msg)
@@ -415,8 +415,8 @@ with menu_col2:
         
         member_list = get_sub_accounts(current_user)
         if member_list:
-            with st.expander("🗑️ Terminate Family Node"):
-                to_delete = st.selectbox("Select Account To Wipe:", member_list)
+            with st.expander("🗑️ Delete Member Account"):
+                to_delete = st.selectbox("Select Account To Delete:", member_list)
                 if st.button("CONFIRM NODE WIPEOUT", type="primary", use_container_width=True):
                     delete_user_account(to_delete)
                     st.success("Account database wiped out!")
