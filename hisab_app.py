@@ -175,32 +175,15 @@ init_db_safely()
 # --- STREAMLIT CONFIGURATION ---
 st.set_page_config(page_title="Professional Secure Ledger", layout="wide", page_icon="💰")
 
-# --- HIGH RE-INFORCED CSS & JAVASCRIPT LOGO ERASER NODE ---
-components.html("""
-<script>
-    function eraseLogos() {
-        var elements = window.parent.document.querySelectorAll('footer, header, .stDecoration, [data-testid="stStatusWidget"]');
-        elements.forEach(function(el) { el.style.setProperty('display', 'none', 'important'); });
-        var root = window.parent.document.querySelector('div.stApp');
-        if (root) {
-            var badges = window.parent.document.querySelectorAll('*');
-            badges.forEach(function(node) {
-                if(node.className && typeof node.className === 'string' && node.className.includes('viewerBadge')) {
-                    node.style.setProperty('display', 'none', 'important');
-                }
-            });
-        }
-    }
-    setInterval(eraseLogos, 50);
-</script>
-""", height=0)
-
+# --- HIGH RE-INFORCED CSS LOGO ERASER NODE ---
 st.markdown("""
     <style>
     header, footer, .stDecoration, [data-testid="stStatusWidget"] { visibility: hidden !important; display: none !important; }
     #MainMenu, .stAppDeployDropdown, button[title="View source code"] { display: none !important; }
-    .stApp { padding-bottom: 30px !important; }
+    .stApp { padding-bottom: 20px !important; }
     div[data-testid="stConnectionStatus"] { display: none !important; }
+    /* Android webview footer fixes */
+    footer a, [class^="viewerBadge_"], [class*="viewerBadge"] { display: none !important; visibility: hidden !important; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -211,25 +194,14 @@ if "logged_in" not in st.session_state: st.session_state["logged_in"] = False
 if "two_fa_verified" not in st.session_state: st.session_state["two_fa_verified"] = False
 if "username" not in st.session_state: st.session_state["username"] = ""
 if "account_mode" not in st.session_state: st.session_state["account_mode"] = "Single"
-if "js_checked" not in st.session_state: st.session_state["js_checked"] = False
 
-# LocalStorage Synchronization Hook For Device Trust Session Validation
-if st.session_state["logged_in"] and not st.session_state["two_fa_verified"] and not st.session_state["js_checked"]:
-    token_key = f"trust_token_v3_{st.session_state['username']}"
-    components.html(f"""
-    <script>
-        var storedToken = localStorage.getItem("{token_key}");
-        if (storedToken) {{
-            var expiry = new Date(parseInt(storedToken));
-            if (new Date() < expiry) {{
-                window.parent.location.href = window.parent.location.href + "?bypass=true";
-            }}
-        }}
-    </script>
-    """, height=0)
+# Standard Time Trust Framework Injection (Bypass for 3 days device sync)
+if "session_expiry" not in st.session_state:
+    st.session_state["session_expiry"] = None
 
-if "bypass" in st.query_params:
-    st.session_state["two_fa_verified"] = True
+if st.session_state["logged_in"] and st.session_state["session_expiry"]:
+    if datetime.now() < st.session_state["session_expiry"]:
+        st.session_state["two_fa_verified"] = True
 
 SECURITY_QUESTIONS = [
     "What is the name of your first school?",
@@ -256,7 +228,6 @@ if not st.session_state["logged_in"]:
                     st.session_state["logged_in"] = True
                     st.session_state["username"] = username_input
                     st.session_state["account_mode"] = mode
-                    st.session_state["js_checked"] = False
                     st.rerun()
                 else: st.error("Invalid credentials.")
                     
@@ -320,6 +291,7 @@ if not check_user_security_setup(current_user):
             else:
                 save_security_setup(current_user, chosen_q, answer_q, two_fa_code)
                 st.session_state["two_fa_verified"] = True
+                st.session_state["session_expiry"] = datetime.now() + timedelta(days=3)
                 st.rerun()
     st.stop()
 
@@ -338,9 +310,7 @@ if not st.session_state["two_fa_verified"]:
             if make_hashes(pin_entry) == db_pin:
                 st.session_state["two_fa_verified"] = True
                 if trust_device:
-                    expiry_timestamp = int((datetime.now() + timedelta(days=3)).timestamp() * 1000)
-                    token_key = f"trust_token_v3_{current_user}"
-                    components.html(f'<script>localStorage.setItem("{token_key}", "{expiry_timestamp}");</script>', height=0)
+                    st.session_state["session_expiry"] = datetime.now() + timedelta(days=3)
                 st.toast("Access Cleared!")
                 st.rerun()
             else: st.error("Invalid Security PIN!")
@@ -409,8 +379,6 @@ with menu_col1:
                 st.error("Incorrect 2-Step Verification PIN!")
             else:
                 delete_user_account(current_user)
-                token_key = f"trust_token_v3_{current_user}"
-                components.html(f'<script>localStorage.removeItem("{token_key}");</script>', height=0)
                 st.session_state["logged_in"] = False
                 st.session_state["two_fa_verified"] = False
                 st.rerun()
@@ -569,8 +537,6 @@ with bot_col1:
         st.link_button("📧 Contact Technical Support Node", email_url, use_container_width=True)
 with bot_col2:
     if st.button("🔒 SECURE TERMINAL SIGN OUT CONNECTION", use_container_width=True, type="primary"):
-        token_key = f"trust_token_v3_{current_user}"
-        components.html(f'<script>localStorage.removeItem("{token_key}");</script>', height=0)
         st.session_state["logged_in"] = False
         st.session_state["two_fa_verified"] = False
         st.rerun()
