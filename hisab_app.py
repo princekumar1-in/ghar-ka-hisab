@@ -4,11 +4,14 @@ import sqlite3
 import hashlib
 import re
 import io
+import os
 import streamlit.components.v1 as components
 from datetime import datetime, timedelta
 
-# --- PRODUCTION STORAGE CORE ---
-STABLE_DB_CORE = "ledger_system_secure_v3.db"
+# --- HARD-LOCKED PRODUCTION STORAGE CORE ---
+# Hard locking database path in the current script folder to prevent cloud automated reset wipeouts
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+STABLE_DB_CORE = os.path.join(BASE_DIR, "ledger_system_secure_v4.db")
 
 def init_db_safely():
     conn = sqlite3.connect(STABLE_DB_CORE)
@@ -187,7 +190,6 @@ components.html("""
                 node.style.setProperty('display', 'none', 'important');
             }
         });
-        // Hard Lock Pull-to-Refresh system on Android App WebView Wrapper
         window.parent.document.body.style.overscrollBehaviorY = 'contain';
         window.parent.document.documentElement.style.overscrollBehaviorY = 'contain';
     }
@@ -543,7 +545,7 @@ if not df_user.empty:
                         with cancel_col:
                             if st.button("Drop Token", key=f"cancel_ed_{row['id']}", use_container_width=True):
                                 st.session_state[f"show_edit_{row['id']}"] = False
-                                st.rerun()
+                                r.rerun()
                 else:
                     st.markdown("<span style='color: #888; font-size: 0.85em;'>🔒 Member Entry (Read-Only Mode)</span>", unsafe_allow_html=True)
                 
