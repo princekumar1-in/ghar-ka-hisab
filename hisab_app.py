@@ -8,7 +8,7 @@ from datetime import datetime, timedelta
 from supabase import create_client, Client
 
 # --- CLOUD DATABASE MASTER CONNECTION ---
-# Prince, tumhari live secure keys yahan rigid integrate kar di hain:
+# Prince, yahan ekdum clean exact protocol URL set kar di hai:
 SUPABASE_URL = "https://vdfmnzvtsvtnzduilgfo.supabase.co"
 SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZkZm1uenZ0c3Z0bnpkdWlsZ2ZvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIxMTA0NDMsImV4cCI6MjA5NzY4NjQ0M30.uSM9AM6lYGo8Q9NmpFSgrGR_osnBpXHjkROaCZjWrwg"
 
@@ -27,18 +27,19 @@ def is_password_strong(password):
 # --- SUPABASE DATA MATRIX LAYER ---
 def add_user(username, password, account_mode, created_by="self"):
     try:
+        # Prince, yahan database ke structure ke mutabik default strings set kar di hain
         data = {
             "username": username,
             "password": make_hashes(password),
             "account_mode": account_mode,
             "created_by": created_by,
-            "sec_question": None,
-            "sec_answer": None,
-            "two_fa_pin": None
+            "sec_question": "Not Set",
+            "sec_answer": "Not Set",
+            "two_fa_pin": "Not Set"
         }
         supabase.table("users").insert(data).execute()
         return True
-    except Exception:
+    except Exception as e:
         return False
 
 def login_user(username, password):
@@ -54,9 +55,9 @@ def login_user(username, password):
 
 def check_user_security_setup(username):
     try:
-        res = supabase.table("users").select("sec_question, two_fa_pin").eq("username", username).execute()
+        res = supabase.table("users").select("sec_question", "two_fa_pin").eq("username", username).execute()
         if res.data:
-            return res.data[0]["sec_question"] is not None and res.data[0]["two_fa_pin"] is not None
+            return res.data[0]["sec_question"] != "Not Set" and res.data[0]["two_fa_pin"] != "Not Set"
         return False
     except Exception:
         return False
@@ -273,7 +274,7 @@ if not st.session_state["logged_in"]:
             reset_user = st.text_input("Enter Registered Username:").strip().lower()
             if reset_user and user_exists(reset_user):
                 assigned_q = get_user_question(reset_user)
-                if assigned_q is None: st.error("Security details not configured yet.")
+                if assigned_q is None or assigned_q == "Not Set": st.error("Security details not configured yet.")
                 else:
                     st.info(f"**Question:** {assigned_q}")
                     user_ans = st.text_input("Your Secret Answer:", type="password")
@@ -525,7 +526,7 @@ if not df_user.empty:
                         with cancel_col:
                             if st.button("Drop Token", key=f"cancel_ed_{row['id']}", use_container_width=True):
                                 st.session_state[f"show_edit_{row['id']}"] = False
-                                r.rerun()
+                                st.rerun()
                 else:
                     st.markdown("<span style='color: #888; font-size: 0.85em;'>🔒 Member Entry (Read-Only Mode)</span>", unsafe_allow_html=True)
                 
