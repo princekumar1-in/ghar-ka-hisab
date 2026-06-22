@@ -41,7 +41,6 @@ def add_user(username, password, account_mode, created_by="self"):
         supabase.table("users").insert(data).execute()
         return True, "Success"
     except Exception as e:
-        # Prince, ab yeh asli error return karega screen par dikhane ke liye
         return False, str(e)
 
 def login_user(username, password):
@@ -170,17 +169,23 @@ def delete_transaction(t_id):
     except Exception:
         pass
 
+# --- FIXED COMBINED NETWORK BALANCER ENGINE ---
 def get_global_summary_for_admin(admin_username):
     try:
         subs = get_sub_accounts(admin_username)
         combined_users = list(subs) + [admin_username]
         
-        res = supabase.table("transactions").select("type, amount").contained_by("username", combined_users).execute()
+        # Prince, yahan ab in-list parsing lagayi hai taaki calculations 100% transparent hon
+        res = supabase.table("transactions").select("type, amount, username").execute()
         if not res.data: return 0, 0, 0
         
         df = pd.DataFrame(res.data)
-        inc = df[df["type"] == "Income"]["amount"].sum()
-        exp = df[df["type"] == "Expense"]["amount"].sum()
+        df_filtered = df[df["username"].isin(combined_users)]
+        
+        if df_filtered.empty: return 0, 0, 0
+        
+        inc = df_filtered[df_filtered["type"] == "Income"]["amount"].sum()
+        exp = df_filtered[df_filtered["type"] == "Expense"]["amount"].sum()
         return inc, exp, (inc - exp)
     except Exception:
         return 0, 0, 0
@@ -272,7 +277,6 @@ if not st.session_state["logged_in"]:
                     if success_reg: 
                         st.success("Account created! Switch to 'Sign In'.")
                     else: 
-                        # PRINCE: Yeh ab exact error dikhaega screen par
                         st.error(f"❌ Database Rejection: {db_error_msg}")
                         
         elif auth_choice == "Forget Password":
