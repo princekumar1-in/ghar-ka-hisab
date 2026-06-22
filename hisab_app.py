@@ -1,29 +1,18 @@
 import streamlit as st
 import pandas as pd
-import sqlite3
 import hashlib
 import re
 import io
-import os
 import streamlit.components.v1 as components
 from datetime import datetime, timedelta
+from supabase import create_client, Client
 
-# --- HARD-LOCKED PRODUCTION STORAGE CORE ---
-# Hard locking database path in the current script folder to prevent cloud automated reset wipeouts
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-STABLE_DB_CORE = os.path.join(BASE_DIR, "ledger_system_secure_v4.db")
+# --- CLOUD DATABASE MASTER CONNECTION ---
+# Prince, tumhari live secure keys yahan rigid integrate kar di hain:
+SUPABASE_URL = "https://vdfmnzvtsvtnzduilgfo.supabase.co"
+SUPABASE_KEY = "sb_publishable_ePZwUw6xGL18URgDYDI8Ww_z-fmsFVV"
 
-def init_db_safely():
-    conn = sqlite3.connect(STABLE_DB_CORE)
-    c = conn.cursor()
-    c.execute('''CREATE TABLE IF NOT EXISTS users 
-                 (username TEXT PRIMARY KEY, password TEXT, account_mode TEXT, created_by TEXT,
-                  sec_question TEXT, sec_answer TEXT, two_fa_pin TEXT)''')
-    c.execute('''CREATE TABLE IF NOT EXISTS transactions 
-                 (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT, date TEXT, type TEXT, 
-                  category TEXT, amount REAL, payment_method TEXT, notes TEXT, log_status TEXT)''')
-    conn.commit()
-    conn.close()
+supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 def make_hashes(password):
     return hashlib.sha256(str.encode(password)).hexdigest()
@@ -35,150 +24,167 @@ def is_password_strong(password):
     if not re.search(r"[0-9]", password): return False, "Password must contain at least one number."
     return True, "Strong Password"
 
+# --- SUPABASE DATA MATRIX LAYER ---
 def add_user(username, password, account_mode, created_by="self"):
-    conn = sqlite3.connect(STABLE_DB_CORE)
-    c = conn.cursor()
     try:
-        c.execute('''INSERT INTO users(username, password, account_mode, created_by, sec_question, sec_answer, two_fa_pin) 
-                     VALUES (?,?,?,?,?,?,?)''', (username, make_hashes(password), account_mode, created_by, None, None, None))
-        conn.commit()
+        data = {
+            "username": username,
+            "password": make_hashes(password),
+            "account_mode": account_mode,
+            "created_by": created_by,
+            "sec_question": None,
+            "sec_answer": None,
+            "two_fa_pin": None
+        }
+        supabase.table("users").insert(data).execute()
         return True
-    except sqlite3.IntegrityError: return False
-    finally: conn.close()
+    except Exception:
+        return False
 
 def login_user(username, password):
-    conn = sqlite3.connect(STABLE_DB_CORE)
-    c = conn.cursor()
-    c.execute('SELECT password, account_mode FROM users WHERE username = ?', (username,))
-    data = c.fetchone()
-    conn.close()
-    if data: return hashlib.sha256(str.encode(password)).hexdigest() == data[0], data[1]
-    return False, None
+    try:
+        res = supabase.table("users").select("password, account_mode").eq("username", username).execute()
+        if res.data:
+            db_pass = res.data[0]["password"]
+            db_mode = res.data[0]["account_mode"]
+            return make_hashes(password) == db_pass, db_mode
+        return False, None
+    except Exception:
+        return False, None
 
 def check_user_security_setup(username):
-    conn = sqlite3.connect(STABLE_DB_CORE)
-    c = conn.cursor()
-    c.execute('SELECT sec_question, two_fa_pin FROM users WHERE username = ?', (username,))
-    data = c.fetchone()
-    conn.close()
-    return data and data[0] is not None and data[1] is not None
+    try:
+        res = supabase.table("users").select("sec_question, two_fa_pin").eq("username", username).execute()
+        if res.data:
+            return res.data[0]["sec_question"] is not None and res.data[0]["two_fa_pin"] is not None
+        return False
+    except Exception:
+        return False
 
 def save_security_setup(username, sec_q, sec_a, two_fa):
-    conn = sqlite3.connect(STABLE_DB_CORE)
-    c = conn.cursor()
-    c.execute('UPDATE users SET sec_question=?, sec_answer=?, two_fa_pin=? WHERE username=?',
-              (sec_q, make_hashes(sec_a.strip().lower()), make_hashes(two_fa), username))
-    conn.commit()
-    conn.close()
+    try:
+        update_data = {
+            "sec_question": sec_q,
+            "sec_answer": make_hashes(sec_a.strip().lower()),
+            "two_fa_pin": make_hashes(two_fa)
+        }
+        supabase.table("users").update(update_data).eq("username", username).execute()
+    except Exception as e:
+        st.error(f"Security Save Error: {e}")
 
 def user_exists(username):
-    conn = sqlite3.connect(STABLE_DB_CORE)
-    c = conn.cursor()
-    c.execute('SELECT 1 FROM users WHERE username = ?', (username,))
-    data = c.fetchone()
-    conn.close()
-    return data is not None
+    try:
+        res = supabase.table("users").select("username").eq("username", username).execute()
+        return len(res.data) > 0
+    except Exception:
+        return False
 
 def verify_security_answer(username, answer):
-    conn = sqlite3.connect(STABLE_DB_CORE)
-    c = conn.cursor()
-    c.execute('SELECT sec_answer FROM users WHERE username = ?', (username,))
-    data = c.fetchone()
-    conn.close()
-    return data and data[0] == make_hashes(answer.strip().lower())
+    try:
+        res = supabase.table("users").select("sec_answer").eq("username", username).execute()
+        if res.data:
+            return res.data[0]["sec_answer"] == make_hashes(answer.strip().lower())
+        return False
+    except Exception:
+        return False
 
 def get_user_question(username):
-    conn = sqlite3.connect(STABLE_DB_CORE)
-    c = conn.cursor()
-    c.execute('SELECT sec_question FROM users WHERE username = ?', (username,))
-    data = c.fetchone()
-    conn.close()
-    return data[0] if data else None
+    try:
+        res = supabase.table("users").select("sec_question").eq("username", username).execute()
+        return res.data[0]["sec_question"] if res.data else None
+    except Exception:
+        return None
 
 def update_user_password(username, new_password):
-    conn = sqlite3.connect(STABLE_DB_CORE)
-    c = conn.cursor()
-    c.execute('UPDATE users SET password = ? WHERE username = ?', (make_hashes(new_password), username))
-    conn.commit()
-    conn.close()
+    try:
+        supabase.table("users").update({"password": make_hashes(new_password)}).eq("username", username).execute()
+    except Exception:
+        pass
 
 def update_user_2fa(username, new_2fa):
-    conn = sqlite3.connect(STABLE_DB_CORE)
-    c = conn.cursor()
-    c.execute('UPDATE users SET two_fa_pin = ? WHERE username = ?', (make_hashes(new_2fa), username))
-    conn.commit()
-    conn.close()
+    try:
+        supabase.table("users").update({"two_fa_pin": make_hashes(new_2fa)}).eq("username", username).execute()
+    except Exception:
+        pass
 
 def delete_user_account(username):
-    conn = sqlite3.connect(STABLE_DB_CORE)
-    c = conn.cursor()
-    c.execute('DELETE FROM users WHERE username = ?', (username,))
-    c.execute('DELETE FROM transactions WHERE username = ?', (username,))
-    conn.commit()
-    conn.close()
+    try:
+        supabase.table("users").delete().eq("username", username).execute()
+        supabase.table("transactions").delete().eq("username", username).execute()
+    except Exception:
+        pass
 
 def get_sub_accounts(admin_username):
-    conn = sqlite3.connect(STABLE_DB_CORE)
-    c = conn.cursor()
-    c.execute('SELECT username FROM users WHERE created_by = ?', (admin_username,))
-    data = c.fetchall()
-    conn.close()
-    return [row[0] for row in data]
+    try:
+        res = supabase.table("users").select("username").eq("created_by", admin_username).execute()
+        return [row["username"] for row in res.data] if res.data else []
+    except Exception:
+        return []
 
 def save_transaction(username, date, t_type, category, amount, payment_method, notes, log_status):
-    conn = sqlite3.connect(STABLE_DB_CORE)
-    c = conn.cursor()
-    c.execute('''INSERT INTO transactions(username, date, type, category, amount, payment_method, notes, log_status) 
-                 VALUES (?,?,?,?,?,?,?,?)''', (username, date, t_type, category, amount, payment_method, notes, log_status))
-    conn.commit()
-    conn.close()
+    try:
+        tx_data = {
+            "username": username,
+            "date": str(date),
+            "type": t_type,
+            "category": category,
+            "amount": float(amount),
+            "payment_method": payment_method,
+            "notes": notes,
+            "log_status": log_status
+        }
+        supabase.table("transactions").insert(tx_data).execute()
+    except Exception as e:
+        st.error(f"Transaction Save Error: {e}")
 
 def get_user_transactions(username):
-    conn = sqlite3.connect(STABLE_DB_CORE)
-    cursor = conn.cursor()
-    cursor.execute('SELECT id, date, type, category, amount, payment_method, notes, log_status FROM transactions WHERE username = ?', (username,))
-    rows = cursor.fetchall()
-    conn.close()
-    return pd.DataFrame(rows, columns=["id", "date", "type", "category", "amount", "payment_method", "notes", "log_status"])
+    try:
+        res = supabase.table("transactions").select("id, date, type, category, amount, payment_method, notes, log_status").eq("username", username).execute()
+        if res.data:
+            return pd.DataFrame(res.data)
+        return pd.DataFrame(columns=["id", "date", "type", "category", "amount", "payment_method", "notes", "log_status"])
+    except Exception:
+        return pd.DataFrame(columns=["id", "date", "type", "category", "amount", "payment_method", "notes", "log_status"])
 
 def update_transaction(t_id, date, t_type, category, amount, payment_method, notes, log_status="Edited"):
-    conn = sqlite3.connect(STABLE_DB_CORE)
-    c = conn.cursor()
-    c.execute('UPDATE transactions SET date=?, type=?, category=?, amount=?, payment_method=?, notes=?, log_status=? WHERE id=?', 
-              (date, t_type, category, amount, payment_method, notes, log_status, t_id))
-    conn.commit()
-    conn.close()
+    try:
+        update_data = {
+            "date": str(date),
+            "type": t_type,
+            "category": category,
+            "amount": float(amount),
+            "payment_method": payment_method,
+            "notes": notes,
+            "log_status": log_status
+        }
+        supabase.table("transactions").update(update_data).eq("id", t_id).execute()
+    except Exception:
+        pass
 
 def delete_transaction(t_id):
-    conn = sqlite3.connect(STABLE_DB_CORE)
-    c = conn.cursor()
-    c.execute('DELETE FROM transactions WHERE id = ?', (t_id,))
-    conn.commit()
-    conn.close()
+    try:
+        supabase.table("transactions").delete().eq("id", t_id).execute()
+    except Exception:
+        pass
 
 def get_global_summary_for_admin(admin_username):
-    subs = get_sub_accounts(admin_username)
-    combined_users = list(subs)
-    combined_users.append(admin_username)
-    conn = sqlite3.connect(STABLE_DB_CORE)
-    placeholders = ','.join('?' for _ in combined_users)
     try:
-        query = f'SELECT type, amount FROM transactions WHERE username IN ({placeholders})'
-        df = pd.read_sql_query(query, conn, params=combined_users)
+        subs = get_sub_accounts(admin_username)
+        combined_users = list(subs) + [admin_username]
+        
+        res = supabase.table("transactions").select("type, amount").contained_by("username", combined_users).execute()
+        if not res.data: return 0, 0, 0
+        
+        df = pd.DataFrame(res.data)
+        inc = df[df["type"] == "Income"]["amount"].sum()
+        exp = df[df["type"] == "Expense"]["amount"].sum()
+        return inc, exp, (inc - exp)
     except Exception:
-        df = pd.DataFrame()
-    conn.close()
-    if df.empty: return 0, 0, 0
-    inc = df[df["type"] == "Income"]["amount"].sum()
-    exp = df[df["type"] == "Expense"]["amount"].sum()
-    return inc, exp, (inc - exp)
-
-init_db_safely()
+        return 0, 0, 0
 
 # --- STREAMLIT CONFIGURATION ---
 st.set_page_config(page_title="Professional Secure Ledger", layout="wide", page_icon="💰")
 
-# --- ADVANCED MOBILE HARD-LOCK SCROLL & LOGO ERASER SCRIPT ---
 components.html("""
 <script>
     function eraseLogosAndFixScroll() {
@@ -199,37 +205,22 @@ components.html("""
 
 st.markdown("""
     <style>
-    /* 1. Global Elements Hard Eraser */
     header, footer, .stDecoration, [data-testid="stStatusWidget"] { visibility: hidden !important; display: none !important; }
     #MainMenu, .stAppDeployDropdown, button[title="View source code"] { display: none !important; }
     .stApp { padding-bottom: 30px !important; overscroll-behavior-y: contain !important; }
     div[data-testid="stConnectionStatus"] { display: none !important; }
-    
-    /* 2. Streamlit Dynamic Branding Watermark Cleaner */
-    [class^="viewerBadge_"], [class*="viewerBadge"], [data-testid="stViewerBadge"] {
-        display: none !important;
-        visibility: hidden !important;
-    }
-    
-    /* 3. Skeleton Loading Frame Overwrite */
-    [data-testid="stSkeleton"] {
-        background-color: #ffffff !important;
-        opacity: 0 !important;
-    }
+    [class^="viewerBadge_"], [class*="viewerBadge"], [data-testid="stViewerBadge"] { display: none !important; visibility: hidden !important; }
+    [data-testid="stSkeleton"] { background-color: #ffffff !important; opacity: 0 !important; }
     </style>
 """, unsafe_allow_html=True)
 
-# Personal Secure Email Setup
 MY_EMAIL = "vermaji3216@gmail.com"
 
 if "logged_in" not in st.session_state: st.session_state["logged_in"] = False
 if "two_fa_verified" not in st.session_state: st.session_state["two_fa_verified"] = False
 if "username" not in st.session_state: st.session_state["username"] = ""
 if "account_mode" not in st.session_state: st.session_state["account_mode"] = "Single"
-
-# Standard Time Trust Framework Injection (Bypass for 3 days device sync)
-if "session_expiry" not in st.session_state:
-    st.session_state["session_expiry"] = None
+if "session_expiry" not in st.session_state: st.session_state["session_expiry"] = None
 
 if st.session_state["logged_in"] and st.session_state["session_expiry"]:
     if datetime.now() < st.session_state["session_expiry"]:
@@ -297,8 +288,7 @@ if not st.session_state["logged_in"]:
                             update_user_password(reset_user, new_reset_pass)
                             st.success("Password changed! Switch to 'Sign In'.")
                         else: st.error("Incorrect answer!")
-            elif reset_user:
-                st.error("Username not found.")
+            elif reset_user: st.error("Username not found.")
                 
     st.markdown("---")
     st.info(f"📧 **Any problem please contact us:** **{MY_EMAIL}**")
@@ -332,15 +322,11 @@ if not st.session_state["two_fa_verified"]:
         pin_entry = st.text_input("Enter Your 2-Step PIN:", type="password", max_chars=6)
         trust_device = st.checkbox("Keep me logged in on this device for 3 days")
         if st.button("VERIFY SECURE PIN", use_container_width=True):
-            conn = sqlite3.connect(STABLE_DB_CORE)
-            c = conn.cursor()
-            c.execute('SELECT two_fa_pin FROM users WHERE username = ?', (current_user,))
-            db_pin = c.fetchone()[0]
-            conn.close()
+            res = supabase.table("users").select("two_fa_pin").eq("username", current_user).execute()
+            db_pin = res.data[0]["two_fa_pin"] if res.data else ""
             if make_hashes(pin_entry) == db_pin:
                 st.session_state["two_fa_verified"] = True
-                if trust_device:
-                    st.session_state["session_expiry"] = datetime.now() + timedelta(days=3)
+                if trust_device: st.session_state["session_expiry"] = datetime.now() + timedelta(days=3)
                 st.toast("Access Cleared!")
                 st.rerun()
             else: st.error("Invalid Security PIN!")
@@ -350,7 +336,7 @@ if not st.session_state["two_fa_verified"]:
         st.rerun()
     st.stop()
 
-# --- PHASE 3: SECURE ENVIRONMENT NODE ---
+# --- PHASE 3: MAIN APP FUNCTIONALITY ---
 st.title("📊 FINANCIAL LEDGER ARCHITECTURE")
 st.markdown(f"*Secure Session Active: **{current_user.upper()}***")
 
@@ -397,23 +383,18 @@ with menu_col1:
         st.markdown("**Danger Zone Area**")
         settings_del_pin = st.text_input("Enter 2-Step PIN To Confirm Deletion:", type="password", max_chars=6, key="settings_del_p")
         if st.button("❗ DELETE MY ACCOUNT PERMANENTLY", type="primary", use_container_width=True):
-            conn = sqlite3.connect(STABLE_DB_CORE)
-            c = conn.cursor()
-            c.execute('SELECT two_fa_pin FROM users WHERE username = ?', (current_user,))
-            db_pin = c.fetchone()[0]
-            conn.close()
+            res = supabase.table("users").select("two_fa_pin").eq("username", current_user).execute()
+            db_pin = res.data[0]["two_fa_pin"] if res.data else ""
             
-            if not verify_security_answer(current_user, auth_ans):
-                st.error("Incorrect Secret Recovery Answer!")
-            elif make_hashes(settings_del_pin) != db_pin:
-                st.error("Incorrect 2-Step Verification PIN!")
+            if not verify_security_answer(current_user, auth_ans): st.error("Incorrect Secret Recovery Answer!")
+            elif make_hashes(settings_del_pin) != db_pin: st.error("Incorrect 2-Step Verification PIN!")
             else:
                 delete_user_account(current_user)
                 st.session_state["logged_in"] = False
                 st.session_state["two_fa_verified"] = False
                 st.rerun()
 
-member_list = []
+member_list = get_sub_accounts(current_user)
 with menu_col2:
     if user_mode == "Multiple":
         with st.expander("👥 Members Account Registry"):
@@ -428,7 +409,6 @@ with menu_col2:
                         st.rerun()
                     else: st.error("Username already registered.")
         
-        member_list = get_sub_accounts(current_user)
         if member_list:
             with st.expander("🗑️ Delete Member Account"):
                 to_delete = st.selectbox("Select Account To Delete:", member_list)
@@ -472,7 +452,7 @@ if user_mode == "Multiple":
     g_col1, g_col2, g_col3 = st.columns(3)
     g_col1.metric("🌍 TOTAL COMBINED REVENUE", f"₹{g_inc:,}")
     g_col2.metric("🛑 TOTAL COMBINED OUTFLOW", f"₹{g_exp:,}")
-    g_col3.metric("📈 NET NETWORK VALUE", f"₹{(g_inc - g_exp):,}")
+    g_col3.metric("📈 NET NETWORK VALUE", f"₹{g_bal:,}")
     st.markdown("---")
 
 view_target_user = current_user
@@ -545,7 +525,7 @@ if not df_user.empty:
                         with cancel_col:
                             if st.button("Drop Token", key=f"cancel_ed_{row['id']}", use_container_width=True):
                                 st.session_state[f"show_edit_{row['id']}"] = False
-                                r.rerun()
+                                st.rerun()
                 else:
                     st.markdown("<span style='color: #888; font-size: 0.85em;'>🔒 Member Entry (Read-Only Mode)</span>", unsafe_allow_html=True)
                 
