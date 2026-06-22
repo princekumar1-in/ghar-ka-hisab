@@ -10,7 +10,7 @@ from supabase import create_client, Client
 # --- CLOUD DATABASE MASTER CONNECTION ---
 # Prince, tumhari live secure keys yahan rigid integrate kar di hain:
 SUPABASE_URL = "https://vdfmnzvtsvtnzduilgfo.supabase.co"
-SUPABASE_KEY = "sb_publishable_ePZwUw6xGL18URgDYDI8Ww_z-fmsFVV"
+SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZkZm1uenZ0c3Z0bnpkdWlsZ2ZvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIxMTA0NDMsImV4cCI6MjA5NzY4NjQ0M30.uSM9AM6lYGo8Q9NmpFSgrGR_osnBpXHjkROaCZjWrwg"
 
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
