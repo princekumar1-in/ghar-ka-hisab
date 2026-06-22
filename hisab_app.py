@@ -525,7 +525,7 @@ if not df_user.empty:
                         with cancel_col:
                             if st.button("Drop Token", key=f"cancel_ed_{row['id']}", use_container_width=True):
                                 st.session_state[f"show_edit_{row['id']}"] = False
-                                st.rerun()
+                                r.rerun()
                 else:
                     st.markdown("<span style='color: #888; font-size: 0.85em;'>🔒 Member Entry (Read-Only Mode)</span>", unsafe_allow_html=True)
                 
