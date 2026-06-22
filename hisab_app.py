@@ -8,11 +8,13 @@ from datetime import datetime, timedelta
 from supabase import create_client, Client
 
 # --- CLOUD DATABASE MASTER CONNECTION ---
-# Prince, yahan ekdum clean exact protocol URL set kar di hai:
 SUPABASE_URL = "https://vdfmnzvtsvtnzduilgfo.supabase.co"
 SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZkZm1uenZ0c3Z0bnpkdWlsZ2ZvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIxMTA0NDMsImV4cCI6MjA5NzY4NjQ0M30.uSM9AM6lYGo8Q9NmpFSgrGR_osnBpXHjkROaCZjWrwg"
 
-supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
+try:
+    supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
+except Exception as e:
+    st.error(f"⚠️ Supabase Connection Initialization Failed: {e}")
 
 def make_hashes(password):
     return hashlib.sha256(str.encode(password)).hexdigest()
@@ -27,7 +29,6 @@ def is_password_strong(password):
 # --- SUPABASE DATA MATRIX LAYER ---
 def add_user(username, password, account_mode, created_by="self"):
     try:
-        # Prince, yahan database ke structure ke mutabik default strings set kar di hain
         data = {
             "username": username,
             "password": make_hashes(password),
@@ -38,9 +39,10 @@ def add_user(username, password, account_mode, created_by="self"):
             "two_fa_pin": "Not Set"
         }
         supabase.table("users").insert(data).execute()
-        return True
+        return True, "Success"
     except Exception as e:
-        return False
+        # Prince, ab yeh asli error return karega screen par dikhane ke liye
+        return False, str(e)
 
 def login_user(username, password):
     try:
@@ -266,8 +268,12 @@ if not st.session_state["logged_in"]:
                 if not new_user or not new_password: st.error("Fields cannot be empty!")
                 elif not is_strong: st.error(pass_msg)
                 else:
-                    if add_user(new_user, new_password, selected_mode, "self"): st.success("Account created! Switch to 'Sign In'.")
-                    else: st.error("Username already taken!")
+                    success_reg, db_error_msg = add_user(new_user, new_password, selected_mode, "self")
+                    if success_reg: 
+                        st.success("Account created! Switch to 'Sign In'.")
+                    else: 
+                        # PRINCE: Yeh ab exact error dikhaega screen par
+                        st.error(f"❌ Database Rejection: {db_error_msg}")
                         
         elif auth_choice == "Forget Password":
             st.subheader("🔄 Reset Password")
@@ -405,7 +411,7 @@ with menu_col2:
                 is_strong, pass_msg = is_password_strong(sub_pass)
                 if sub_name and sub_pass:
                     if not is_strong: st.error(pass_msg)
-                    elif add_user(sub_name, sub_pass, "Single", current_user):
+                    elif add_user(sub_name, sub_pass, "Single", current_user)[0]:
                         st.success("Member account activated!")
                         st.rerun()
                     else: st.error("Username already registered.")
