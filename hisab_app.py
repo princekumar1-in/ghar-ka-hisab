@@ -169,13 +169,11 @@ def delete_transaction(t_id):
     except Exception:
         pass
 
-# --- FIXED COMBINED NETWORK BALANCER ENGINE ---
 def get_global_summary_for_admin(admin_username):
     try:
         subs = get_sub_accounts(admin_username)
         combined_users = list(subs) + [admin_username]
         
-        # Prince, yahan ab in-list parsing lagayi hai taaki calculations 100% transparent hon
         res = supabase.table("transactions").select("type, amount, username").execute()
         if not res.data: return 0, 0, 0
         
@@ -347,174 +345,217 @@ if not st.session_state["two_fa_verified"]:
         st.rerun()
     st.stop()
 
-# --- PHASE 3: MAIN APP FUNCTIONALITY ---
+# --- PHASE 3: MAIN NAVIGATION TABS ARCHITECTURE ---
 st.title("📊 FINANCIAL LEDGER ARCHITECTURE")
 st.markdown(f"*Secure Session Active: **{current_user.upper()}***")
 
-# --- DYNAMIC EXCEL ENGINE BACKUP ---
-df_all_backup = get_user_transactions(current_user)
-if not df_all_backup.empty:
-    buffer = io.BytesIO()
-    with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
-        df_all_backup.to_excel(writer, index=False, sheet_name='Ledger Export')
-    buffer.seek(0)
-    st.download_button(
-        label="📥 DOWNLOAD ALL DATA TO EXCEL SHEET (.XLSX)",
-        data=buffer,
-        file_name=f"hisab_backup_{datetime.now().strftime('%Y-%m-%d')}.xlsx",
-        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        type="primary"
-    )
+# PRINCE: Mobile navigation ko clean karne ke liye yahan main tabs system add kar diya ha
+main_tabs = st.tabs(["🏠 Dashboard Matrix", "📝 Log New Entry", "🔍 Statement Records"])
 
-st.markdown("### ⚙️ System Control Center")
-menu_col1, menu_col2 = st.columns(2)
-
-with menu_col1:
-    with st.expander("👤 Account Profile Settings"):
-        auth_ans = st.text_input("Verify Secret Answer First:", type="password", key="sett_ans_check")
-        st.markdown("---")
-        settings_new_pass = st.text_input("New Strong Password:", type="password", key="settings_p")
-        if st.button("Commit New Password", use_container_width=True):
-            is_strong, pass_msg = is_password_strong(settings_new_pass)
-            if not verify_security_answer(current_user, auth_ans): st.error("Incorrect Answer!")
-            elif not is_strong: st.error(pass_msg)
-            else:
-                update_user_password(current_user, settings_new_pass)
-                st.success("Password updated successfully!")
-        st.markdown("---")
-        settings_new_2fa = st.text_input("New 2-Step PIN:", type="password", max_chars=6, key="settings_2fa")
-        if st.button("Commit New PIN", use_container_width=True):
-            if not verify_security_answer(current_user, auth_ans): st.error("Incorrect Answer!")
-            elif not settings_new_2fa.isdigit() or len(settings_new_2fa) < 4: st.error("Invalid pin.")
-            else:
-                update_user_2fa(current_user, settings_new_2fa)
-                st.success("PIN updated successfully!")
-        
-        st.markdown("---")
-        st.markdown("**Danger Zone Area**")
-        settings_del_pin = st.text_input("Enter 2-Step PIN To Confirm Deletion:", type="password", max_chars=6, key="settings_del_p")
-        if st.button("❗ DELETE MY ACCOUNT PERMANENTLY", type="primary", use_container_width=True):
-            res = supabase.table("users").select("two_fa_pin").eq("username", current_user).execute()
-            db_pin = res.data[0]["two_fa_pin"] if res.data else ""
-            
-            if not verify_security_answer(current_user, auth_ans): st.error("Incorrect Secret Recovery Answer!")
-            elif make_hashes(settings_del_pin) != db_pin: st.error("Incorrect 2-Step Verification PIN!")
-            else:
-                delete_user_account(current_user)
-                st.session_state["logged_in"] = False
-                st.session_state["two_fa_verified"] = False
-                st.rerun()
-
-member_list = get_sub_accounts(current_user)
-with menu_col2:
+# ==========================================
+# TAB 1: DASHBOARD MATRIX & CONTROL CENTER
+# ==========================================
+with main_tabs[0]:
     if user_mode == "Multiple":
-        with st.expander("👥 Members Account Registry"):
-            sub_name = st.text_input("Member Username:", key="sub_name_reg").strip().lower()
-            sub_pass = st.text_input("Member Password:", type="password", key="sub_pass_reg")
-            if st.button("Add Member", use_container_width=True):
-                is_strong, pass_msg = is_password_strong(sub_pass)
-                if sub_name and sub_pass:
-                    if not is_strong: st.error(pass_msg)
-                    elif add_user(sub_name, sub_pass, "Single", current_user)[0]:
-                        st.success("Member account activated!")
-                        st.rerun()
-                    else: st.error("Username already registered.")
+        st.markdown("### 🌐 Consolidated Network Matrix Balance")
+        g_inc, g_exp, g_bal = get_global_summary_for_admin(current_user)
+        g_col1, g_col2, g_col3 = st.columns(3)
+        g_col1.metric("🌍 TOTAL COMBINED REVENUE", f"₹{g_inc:,}")
+        g_col2.metric("🛑 TOTAL COMBINED OUTFLOW", f"₹{g_exp:,}")
+        g_col3.metric("📈 NET NETWORK VALUE", f"₹{g_bal:,}")
+        st.markdown("---")
+
+    member_list = get_sub_accounts(current_user)
+    view_target_user = current_user
+    is_viewing_self = True
+
+    if user_mode == "Multiple" and member_list:
+        st.markdown("### 🔍 Select Dynamic Matrix Node View")
+        options = ["My Personal Entries Only"] + [m.upper() for m in member_list]
+        selected_view = st.selectbox("Choose view target parameters:", options, key="view_selector_dashboard")
+        if selected_view != "My Personal Entries Only":
+            view_target_user = selected_view.lower()
+            is_viewing_self = False
+
+    df_user = get_user_transactions(view_target_user)
+
+    st.markdown(f"### 👤 Active Target Node Dashboard: **{view_target_user.upper()}**")
+    if not df_user.empty:
+        df_user["date"] = pd.to_datetime(df_user["date"])
+        df_user["Month"] = df_user["date"].dt.strftime('%B %Y')
+        selected_month = st.selectbox("Select Display Month Selector:", df_user["Month"].unique(), key=f"month_dash_{view_target_user}")
+        df_filtered = df_user[df_user["Month"] == selected_month].copy()
         
-        if member_list:
-            with st.expander("🗑️ Delete Member Account"):
-                to_delete = st.selectbox("Select Account To Delete:", member_list)
-                if st.button("CONFIRM Delete Account", type="primary", use_container_width=True):
-                    delete_user_account(to_delete)
-                    st.success("Account database wiped out!")
+        my_inc = df_filtered[df_filtered["type"] == "Income"]["amount"].sum()
+        my_exp = df_filtered[df_filtered["type"] == "Expense"]["amount"].sum()
+        
+        col1, col2, col3 = st.columns(3)
+        col1.metric("🟩 REVENUE STREAM", f"₹{my_inc:,}")
+        col2.metric("🟥 OUTFLOW DRAIN", f"₹{my_exp:,}")
+        col3.metric("🟦 NET BALANCED NODE", f"₹{(my_inc - my_exp):,}")
+        
+        st.markdown("---")
+        st.subheader("📊 Expense Distribution Analysis Matrix")
+        exp_df = df_filtered[df_filtered["type"] == "Expense"]
+        if not exp_df.empty:
+            cat_totals = exp_df.groupby("category")["amount"].sum().reset_index()
+            st.bar_chart(data=cat_totals, x="category", y="amount", color="#ff4b4b", use_container_width=True)
+        else: 
+            st.info("No records match selection analytics.")
+    else: 
+        st.info("No records inside this dashboard node yet.")
+
+    st.markdown("---")
+    st.markdown("### ⚙️ System Control Center")
+    menu_col1, menu_col2 = st.columns(2)
+
+    with menu_col1:
+        with st.expander("👤 Account Profile Settings"):
+            auth_ans = st.text_input("Verify Secret Answer First:", type="password", key="sett_ans_check")
+            st.markdown("---")
+            settings_new_pass = st.text_input("New Strong Password:", type="password", key="settings_p")
+            if st.button("Commit New Password", use_container_width=True):
+                is_strong, pass_msg = is_password_strong(settings_new_pass)
+                if not verify_security_answer(current_user, auth_ans): st.error("Incorrect Answer!")
+                elif not is_strong: st.error(pass_msg)
+                else:
+                    update_user_password(current_user, settings_new_pass)
+                    st.success("Password updated successfully!")
+            st.markdown("---")
+            settings_new_2fa = st.text_input("New 2-Step PIN:", type="password", max_chars=6, key="settings_2fa")
+            if st.button("Commit New PIN", use_container_width=True):
+                if not verify_security_answer(current_user, auth_ans): st.error("Incorrect Answer!")
+                elif not settings_new_2fa.isdigit() or len(settings_new_2fa) < 4: st.error("Invalid pin.")
+                else:
+                    update_user_2fa(current_user, settings_new_2fa)
+                    st.success("PIN updated successfully!")
+            
+            st.markdown("---")
+            st.markdown("**Danger Zone Area**")
+            settings_del_pin = st.text_input("Enter 2-Step PIN To Confirm Deletion:", type="password", max_chars=6, key="settings_del_p")
+            if st.button("❗ DELETE MY ACCOUNT PERMANENTLY", type="primary", use_container_width=True):
+                res = supabase.table("users").select("two_fa_pin").eq("username", current_user).execute()
+                db_pin = res.data[0]["two_fa_pin"] if res.data else ""
+                
+                if not verify_security_answer(current_user, auth_ans): st.error("Incorrect Secret Recovery Answer!")
+                elif make_hashes(settings_del_pin) != db_pin: st.error("Incorrect 2-Step Verification PIN!")
+                else:
+                    delete_user_account(current_user)
+                    st.session_state["logged_in"] = False
+                    st.session_state["two_fa_verified"] = False
                     st.rerun()
 
-st.markdown("---")
+    with menu_col2:
+        if user_mode == "Multiple":
+            with st.expander("👥 Members Account Registry"):
+                sub_name = st.text_input("Member Username:", key="sub_name_reg").strip().lower()
+                sub_pass = st.text_input("Member Password:", type="password", key="sub_pass_reg")
+                if st.button("Add Member", use_container_width=True):
+                    is_strong, pass_msg = is_password_strong(sub_pass)
+                    if sub_name and sub_pass:
+                        if not is_strong: st.error(pass_msg)
+                        elif add_user(sub_name, sub_pass, "Single", current_user)[0]:
+                            st.success("Member account activated!")
+                            st.rerun()
+                        else: st.error("Username already registered.")
+            
+            if member_list:
+                with st.expander("🗑️ Delete Member Account"):
+                    to_delete = st.selectbox("Select Account To Delete:", member_list)
+                    if st.button("CONFIRM Delete Account", type="primary", use_container_width=True):
+                        delete_user_account(to_delete)
+                        st.success("Account database wiped out!")
+                        st.rerun()
 
-# --- UPGRADED TRANSACTION FORM ---
-st.markdown("### 📝 Log New Transaction Entry")
-with st.form("entry_form", clear_on_submit=True):
-    f_col1, f_col2 = st.columns(2)
-    with f_col1:
-        date_input = st.date_input("Transaction Date", datetime.now())
-        type_input = st.selectbox("Accounting Type", ["Expense", "Income"])
-        pay_method_input = st.selectbox("Payment Method", ["Cash", "Bank (Online/UPI)"])
-    with f_col2:
-        category_input = st.text_input("Category / Particulars Label", value="") 
-        amount_input = st.number_input("Amount (INR)", min_value=1.0, step=1.0)
-        notes_input = st.text_area("Add Description / Note (Karan)", value="")
+# ==========================================
+# TAB 2: LOG NEW TRANSACTION ENTRY FORM
+# ==========================================
+with main_tabs[1]:
+    st.markdown("### 📝 Log New Transaction Entry")
+    with st.form("entry_form", clear_on_submit=True):
+        f_col1, f_col2 = st.columns(2)
+        with f_col1:
+            date_input = st.date_input("Transaction Date", datetime.now())
+            type_input = st.selectbox("Accounting Type", ["Expense", "Income"])
+            pay_method_input = st.selectbox("Payment Method", ["Cash", "Bank (Online/UPI)"])
+        with f_col2:
+            category_input = st.text_input("Category / Particulars Label", value="") 
+            amount_input = st.number_input("Amount (INR)", min_value=1.0, step=1.0)
+            notes_input = st.text_area("Add Description / Note (Karan)", value="")
+            
+        submit_btn = st.form_submit_button("COMMIT SECURE TRANSACTION RECORD", use_container_width=True)
+
+    if submit_btn:
+        if not category_input.strip(): st.error("Valid label designation required.")
+        else:
+            today_str = datetime.now().strftime('%Y-%m-%d')
+            selected_date_str = date_input.strftime('%Y-%m-%d')
+            status_tag = "Auto" if today_str == selected_date_str else "Edited"
+            save_transaction(current_user, selected_date_str, type_input, category_input.strip().title(), amount_input, pay_method_input, notes_input.strip(), status_tag)
+            st.toast("Logged permanently!", icon="✅")
+            st.success("Record submitted successfully to cloud node!")
+
+# ==========================================
+# TAB 3: STATEMENT RECORDS & EXCEL GENERATOR
+# ==========================================
+with main_tabs[2]:
+    st.markdown("### 🔍 Live Statement Ledger Records")
+    
+    # Backup trigger engine at top of records
+    df_all_backup = get_user_transactions(current_user)
+    if not df_all_backup.empty:
+        buffer = io.BytesIO()
+        with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
+            df_all_backup.to_excel(writer, index=False, sheet_name='Ledger Export')
+        buffer.seek(0)
+        st.download_button(
+            label="📥 DOWNLOAD ALL MY DATA TO EXCEL SHEET (.XLSX)",
+            data=buffer,
+            file_name=f"hisab_backup_{datetime.now().strftime('%Y-%m-%d')}.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            type="primary",
+            key="excel_download_btn"
+        )
+        st.markdown("---")
+
+    member_list_records = get_sub_accounts(current_user)
+    view_target_user_rec = current_user
+    is_viewing_self_rec = True
+
+    if user_mode == "Multiple" and member_list_records:
+        options_rec = ["My Personal Entries Only"] + [m.upper() for m in member_list_records]
+        selected_view_rec = st.selectbox("Choose data target nodes to audit:", options_rec, key="view_selector_records")
+        if selected_view_rec != "My Personal Entries Only":
+            view_target_user_rec = selected_view_rec.lower()
+            is_viewing_self_rec = False
+
+    df_user_rec = get_user_transactions(view_target_user_rec)
+
+    if not df_user_rec.empty:
+        df_user_rec["date"] = pd.to_datetime(df_user_rec["date"])
+        df_user_rec["Month"] = df_user_rec["date"].dt.strftime('%B %Y')
+        selected_month_rec = st.selectbox("Select Display Month Selector:", df_user_rec["Month"].unique(), key=f"month_rec_{view_target_user_rec}")
+        df_filtered_rec = df_user_rec[df_user_rec["Month"] == selected_month_rec].copy()
         
-    submit_btn = st.form_submit_button("COMMIT SECURE TRANSACTION RECORD", use_container_width=True)
-
-if submit_btn:
-    if not category_input.strip(): st.error("Valid label designation required.")
-    else:
-        today_str = datetime.now().strftime('%Y-%m-%d')
-        selected_date_str = date_input.strftime('%Y-%m-%d')
-        status_tag = "Auto" if today_str == selected_date_str else "Edited"
-        save_transaction(current_user, selected_date_str, type_input, category_input.strip().title(), amount_input, pay_method_input, notes_input.strip(), status_tag)
-        st.toast("Logged permanently!", icon="✅")
-        st.rerun()
-
-st.markdown("---")
-
-if user_mode == "Multiple":
-    st.markdown("### 🌐 Consolidated Network Matrix Balance")
-    g_inc, g_exp, g_bal = get_global_summary_for_admin(current_user)
-    g_col1, g_col2, g_col3 = st.columns(3)
-    g_col1.metric("🌍 TOTAL COMBINED REVENUE", f"₹{g_inc:,}")
-    g_col2.metric("🛑 TOTAL COMBINED OUTFLOW", f"₹{g_exp:,}")
-    g_col3.metric("📈 NET NETWORK VALUE", f"₹{g_bal:,}")
-    st.markdown("---")
-
-view_target_user = current_user
-is_viewing_self = True
-
-if user_mode == "Multiple" and member_list:
-    st.markdown("### 🔍 Select Dynamic Matrix Node View")
-    options = ["My Personal Entries Only"] + [m.upper() for m in member_list]
-    selected_view = st.selectbox("Choose view target parameters:", options)
-    if selected_view != "My Personal Entries Only":
-        view_target_user = selected_view.lower()
-        is_viewing_self = False
-
-df_user = get_user_transactions(view_target_user)
-
-st.markdown(f"### 👤 Active Target Node Dashboard: **{view_target_user.upper()}**")
-if not df_user.empty:
-    df_user["date"] = pd.to_datetime(df_user["date"])
-    df_user["Month"] = df_user["date"].dt.strftime('%B %Y')
-    selected_month = st.selectbox("Select Display Month Selector:", df_user["Month"].unique(), key=f"month_{view_target_user}")
-    df_filtered = df_user[df_user["Month"] == selected_month].copy()
-    
-    my_inc = df_filtered[df_filtered["type"] == "Income"]["amount"].sum()
-    my_exp = df_filtered[df_filtered["type"] == "Expense"]["amount"].sum()
-    
-    col1, col2, col3 = st.columns(3)
-    col1.metric("🟩 REVENUE STREAM", f"₹{my_inc:,}")
-    col2.metric("🟥 OUTFLOW DRAIN", f"₹{my_exp:,}")
-    col3.metric("🟦 NET BALANCED NODE", f"₹{(my_inc - my_exp):,}")
-    
-    st.markdown("---")
-    col_left, col_right = st.columns(2)
-    
-    with col_left:
-        st.subheader("📝 Live Statement Ledger Records")
-        for index, row in df_filtered.sort_values(by="date", ascending=False).iterrows():
+        st.markdown(f"Showing statement for: **{view_target_user_rec.upper()}** ({selected_month_rec})")
+        
+        for index, row in df_filtered_rec.sort_values(by="date", ascending=False).iterrows():
             tag_color = "🟩 [Income]" if row['type'] == "Income" else "🟥 [Expense]"
             method_label = "🏪 Cash" if row['payment_method'] == "Cash" else "🏦 Bank"
             entry_note = row['notes'] if row['notes'] else "No description."
             
-            with st.expander(f"Date: {row['date'].strftime('%Y-%m-%d')} | {tag_color} | **{row['category']}** | {method_label} | **₹{row['amount']:,}** | *[{row['log_status']}]*"):
+            with st.expander(f"Date: {row['date'].strftime('%Y-%m-%d')} | {tag_color} | **{row['category']}** | {method_label} | **₹{row['amount']:,}**"):
                 st.markdown(f"**📝 Notes:** *{entry_note}*")
+                st.markdown(f"**Status Tag:** `[{row['log_status']}]`")
                 
-                if is_viewing_self:
+                if is_viewing_self_rec:
                     st.markdown("---")
                     edit_col, delete_col = st.columns(2)
                     with edit_col:
-                        if st.button("✏️ Edit", key=f"btn_ed_{row['id']}", use_container_width=True):
+                        if st.button("✏️ Edit Entry", key=f"btn_ed_{row['id']}", use_container_width=True):
                             st.session_state[f"show_edit_{row['id']}"] = True
                     with delete_col:
-                        if st.button("🗑️ Delete", key=f"btn_del_{row['id']}", type="primary", use_container_width=True):
+                        if st.button("🗑️ Delete Entry", key=f"btn_del_{row['id']}", type="primary", use_container_width=True):
                             delete_transaction(row['id'])
                             st.toast("Wiped out!")
                             st.rerun()
@@ -539,23 +580,17 @@ if not df_user.empty:
                                 st.rerun()
                 else:
                     st.markdown("<span style='color: #888; font-size: 0.85em;'>🔒 Member Entry (Read-Only Mode)</span>", unsafe_allow_html=True)
-                
-    with col_right:
-        st.subheader("📊 Expense Distribution Analysis Matrix")
-        exp_df = df_filtered[df_filtered["type"] == "Expense"]
-        if not exp_df.empty:
-            cat_totals = exp_df.groupby("category")["amount"].sum().reset_index()
-            st.bar_chart(data=cat_totals, x="category", y="amount", color="#ff4b4b", use_container_width=True)
-        else: st.info("No records match selection analytics.")
-else: st.info("No records inside your dashboard yet.")
+    else:
+        st.info("No transaction statements logged inside this node frame yet.")
 
 st.markdown("---")
 
+# --- FOOTER TERMINAL CONNECTION ---
 bot_col1, bot_col2 = st.columns(2)
 with bot_col1:
     st.info(f"📧 **Any problem please contact us:**\n\n📩 **{MY_EMAIL}**")
 with bot_col2:
-    if st.button("🔒 SECURE TERMINAL SIGN OUT CONNECTION", use_container_width=True, type="primary"):
+    if st.button("🔒 SECURE TERMINAL SIGN OUT CONNECTION", use_container_width=True, type="primary", key="signout_footer_btn"):
         st.session_state["logged_in"] = False
         st.session_state["two_fa_verified"] = False
         st.rerun()
