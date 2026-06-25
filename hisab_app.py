@@ -3,6 +3,7 @@ import pandas as pd
 import hashlib
 import re
 import io
+import urllib.request
 import streamlit.components.v1 as components
 from datetime import datetime, timedelta
 from supabase import create_client, Client
@@ -15,6 +16,14 @@ try:
     supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 except Exception as e:
     st.error(f"⚠️ Supabase Connection Initialization Failed: {e}")
+
+# --- PRINCE: LIVE IP TRACKER FUNCTION ---
+def get_user_ip():
+    try:
+        # Yeh direct online API se tumhare mobile ka exact public IP khinchta ha
+        return urllib.request.urlopen('https://api.ipify.org').read().decode('utf8')
+    except Exception:
+        return "127.0.0.1"
 
 def make_hashes(password):
     return hashlib.sha256(str.encode(password)).hexdigest()
@@ -191,7 +200,6 @@ def get_global_summary_for_admin(admin_username):
 # --- STREAMLIT CONFIGURATION ---
 st.set_page_config(page_title="Professional Secure Ledger", layout="wide", page_icon="💰")
 
-# PRINCE: JavaScript Engine Jo Browser Ke LocalStorage Se Device Recognition Handle Karega
 components.html("""
 <script>
     function eraseLogosAndFixScroll() {
@@ -207,52 +215,8 @@ components.html("""
         window.parent.document.documentElement.style.overscrollBehaviorY = 'contain';
     }
     setInterval(eraseLogosAndFixScroll, 50);
-
-    // Secure Device Memory Sync Engine
-    window.addEventListener('message', function(e) {
-        if (e.data.type === 'SAVE_DEVICE_TOKEN') {
-            localStorage.setItem('ledger_device_user', e.data.username);
-            localStorage.setItem('ledger_device_expiry', e.data.expiry);
-        }
-        if (e.data.type === 'CLEAR_DEVICE') {
-            localStorage.removeItem('ledger_device_user');
-            localStorage.removeItem('ledger_device_expiry');
-        }
-    });
-
-    // Auto-login check loop
-    function checkDeviceSaved() {
-        var user = localStorage.getItem('ledger_device_user');
-        var exp = localStorage.getItem('ledger_device_expiry');
-        if (user && exp) {
-            if (new Date().getTime() < parseInt(exp)) {
-                window.parent.postMessage({type: 'AUTO_LOGIN_TRIGGER', user: user}, '*');
-            } else {
-                localStorage.removeItem('ledger_device_user');
-                localStorage.removeItem('ledger_device_expiry');
-            }
-        }
-    }
-    setTimeout(checkDeviceSaved, 500);
 </script>
 """, height=0)
-
-# Streamlit bridge window detection protocol
-if "js_auto_user" not in st.session_state:
-    st.session_state["js_auto_user"] = None
-
-# Query param bridge logic
-q_params = st.query_params
-if "autologin" in q_params and not st.session_state.get("logged_in", False):
-    st.session_state["logged_in"] = True
-    st.session_state["username"] = q_params["autologin"]
-    st.session_state["two_fa_verified"] = True
-    st.session_state["account_mode"] = "Multiple"  # Default fallback, login check drops update
-    res = supabase.table("users").select("account_mode").eq("username", q_params["autologin"]).execute()
-    if res.data:
-        st.session_state["account_mode"] = res.data[0]["account_mode"]
-    st.query_params.clear()
-    st.rerun()
 
 st.markdown("""
     <style>
@@ -267,10 +231,16 @@ st.markdown("""
 
 MY_EMAIL = "vermaji3216@gmail.com"
 
+# --- SYSTEM STATE STORAGE REGISTER ---
 if "logged_in" not in st.session_state: st.session_state["logged_in"] = False
 if "two_fa_verified" not in st.session_state: st.session_state["two_fa_verified"] = False
 if "username" not in st.session_state: st.session_state["username"] = ""
 if "account_mode" not in st.session_state: st.session_state["account_mode"] = "Single"
+
+# PRINCE: Local cache memory initialization for live matching
+if "trusted_ip_cache" not in st.session_state: st.session_state["trusted_ip_cache"] = None
+
+user_current_ip = get_user_ip()
 
 SECURITY_QUESTIONS = [
     "What is the name of your first school?",
@@ -283,28 +253,6 @@ SECURITY_QUESTIONS = [
 if not st.session_state["logged_in"]:
     st.title("🔒 SECURED LEDGER SYSTEM")
     st.markdown("---")
-    
-    # Transparent javascript proxy injection trigger point
-    st.markdown("""
-        <div style='background: #1e293b; padding: 12px; border-radius: 8px; margin-bottom: 15px; font-size:0.9em; color:#94a3b8;'>
-            🔄 Checking for trusted device token... If this is a saved device, you will be bypassed automatically in 2 seconds.
-        </div>
-    """, unsafe_allow_html=True)
-    
-    # HTML event capture mechanism
-    html_bridge = """
-    <script>
-        window.addEventListener('message', function(e) {
-            if(e.data.type === 'AUTO_LOGIN_TRIGGER') {
-                const url = new URL(window.parent.location.href);
-                url.searchParams.set('autologin', e.data.user);
-                window.parent.location.href = url.href;
-            }
-        });
-    </script>
-    """
-    components.html(html_bridge, height=0)
-
     auth_choice = st.radio("Select Action:", ["Sign In", "Create new Account", "Forget Password"], horizontal=True)
     col1, _ = st.columns([1, 2])
     
@@ -382,40 +330,27 @@ if not check_user_security_setup(current_user):
             else:
                 save_security_setup(current_user, chosen_q, answer_q, two_fa_code)
                 st.session_state["two_fa_verified"] = True
-                
-                # Device recognize automatically token save injection point (30 Days Memory)
-                future_expiry_ms = int((datetime.now() + timedelta(days=30)).timestamp() * 1000)
-                components.html(f"""
-                <script>
-                    window.parent.postMessage({{type: 'SAVE_DEVICE_TOKEN', username: '{current_user}', expiry: '{future_expiry_ms}'}}, '*');
-                </script>
-                """, height=0)
-                
+                st.session_state["trusted_ip_cache"] = user_current_ip
                 st.rerun()
     st.stop()
 
+# PRINCE: Pure IP verification engine. Agar IP purane cached IP se match ho jata ha, toh code bypass kar dega.
+if st.session_state["trusted_ip_cache"] == user_current_ip:
+    st.session_state["two_fa_verified"] = True
+
 if not st.session_state["two_fa_verified"]:
     st.title("🛡️ 2-STEP VERIFICATION GATEWAY")
+    st.info(f"🌐 Your Device IP: `{user_current_ip}` (Not Whitelisted yet for this session)")
     col_2fa, _ = st.columns([1, 2])
     with col_2fa:
         pin_entry = st.text_input("Enter Your 2-Step PIN:", type="password", max_chars=6)
-        trust_device = st.checkbox("Trust this device (Don't ask PIN again for 30 days)", value=True)
-        if st.button("VERIFY SECURE PIN", use_container_width=True):
+        if st.button("VERIFY SECURE PIN & SAVE IP", use_container_width=True):
             res = supabase.table("users").select("two_fa_pin").eq("username", current_user).execute()
             db_pin = res.data[0]["two_fa_pin"] if res.data else ""
             if make_hashes(pin_entry) == db_pin:
                 st.session_state["two_fa_verified"] = True
-                
-                if trust_device:
-                    # Device trusted calculation matrix payload (30 days persistence)
-                    future_expiry_ms = int((datetime.now() + timedelta(days=30)).timestamp() * 1000)
-                    components.html(f"""
-                    <script>
-                        window.parent.postMessage({{type: 'SAVE_DEVICE_TOKEN', username: '{current_user}', expiry: '{future_expiry_ms}'}}, '*');
-                    </script>
-                    """, height=0)
-                    
-                st.toast("Access Cleared!")
+                st.session_state["trusted_ip_cache"] = user_current_ip  # IP lock ho gaya ha
+                st.toast("IP Locked Successfully!")
                 st.rerun()
             else: st.error("Invalid Security PIN!")
     st.markdown("---")
@@ -426,7 +361,7 @@ if not st.session_state["two_fa_verified"]:
 
 # --- PHASE 3: MAIN NAVIGATION TABS ARCHITECTURE ---
 st.title("📊 FINANCIAL LEDGER ARCHITECTURE")
-st.markdown(f"*Secure Session Active: **{current_user.upper()}***")
+st.markdown(f"*Secure Session Active: **{current_user.upper()}*** | 🌐 *Device IP: `{user_current_ip}` (Trusted)*")
 
 main_tabs = st.tabs(["🏠 Dashboard Matrix", "📝 Log New Entry", "🔍 Statement Records"])
 
@@ -521,6 +456,7 @@ with main_tabs[0]:
                     delete_user_account(current_user)
                     st.session_state["logged_in"] = False
                     st.session_state["two_fa_verified"] = False
+                    st.session_state["trusted_ip_cache"] = None
                     st.rerun()
 
     with menu_col2:
@@ -650,7 +586,7 @@ with main_tabs[2]:
                             if st.button("Commit Changes", key=f"save_ed_{row['id']}", use_container_width=True):
                                 update_transaction(row['id'], row['date'].strftime('%Y-%m-%d'), edit_type, edit_cat.title(), edit_amt, edit_method, edit_notes, "Edited")
                                 st.session_state[f"show_edit_{row['id']}"] = False
-                                st.rerun()
+                                r.rerun()
                         with cancel_col:
                             if st.button("Drop Token", key=f"cancel_ed_{row['id']}", use_container_width=True):
                                 st.session_state[f"show_edit_{row['id']}"] = False
@@ -668,12 +604,7 @@ with bot_col1:
     st.info(f"📧 **Any problem please contact us:**\n\n📩 **{MY_EMAIL}**")
 with bot_col2:
     if st.button("🔒 SECURE TERMINAL SIGN OUT CONNECTION", use_container_width=True, type="primary", key="signout_footer_btn"):
-        # Clear localstorage engine session on logout
-        components.html("""
-        <script>
-            window.parent.postMessage({type: 'CLEAR_DEVICE'}, '*');
-        </script>
-        """, height=0)
         st.session_state["logged_in"] = False
         st.session_state["two_fa_verified"] = False
+        st.session_state["trusted_ip_cache"] = None  # Explicit logout clears IP whitelist
         st.rerun()
