@@ -176,7 +176,6 @@ def delete_transaction(t_id):
     except Exception:
         pass
 
-# PRINCE: Pure database profile clearing protocol for specific name node
 def delete_credit_profile_completely(username, person_name):
     try:
         supabase.table("transactions").delete().eq("username", username).eq("category", person_name).execute()
@@ -231,13 +230,6 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-if "logged_in" not in st.session_state: st.session_state["logged_in"] = False
-if "two_fa_verified" not in st.session_state: st.session_state["two_fa_verified"] = False
-if "username" not in st.session_state: st.session_state["username"] = ""
-if "account_mode" not in st.session_state: st.session_state["account_mode"] = "Single"
-if "trusted_ip_cache" not in st.session_state: st.session_state["trusted_ip_cache"] = None
-
-# --- PRINCE: MULTI LANGUAGE DICTIONARY CONFIG ---
 LANG_DICT = {
     "English": {
         "title": "📊 FINANCIAL LEDGER ARCHITECTURE",
@@ -281,8 +273,6 @@ LANG_DICT = {
         "sec_check_lbl": "Verify Security Answer First:",
         "new_pass_lbl": "New Strong Password:",
         "btn_commit_pass": "Commit New Password",
-        "new_pin_lbl": "New 2-Step PIN:",
-        "btn_commit_pin": "Commit New PIN",
         "family_reg": "👥 Family Members Registry",
         "member_user": "Member Username:",
         "member_pass": "Member Password:",
@@ -350,7 +340,7 @@ LANG_DICT = {
         "net_matrix_title": "🌐 समेकित कुल पारिवारिक संतुलन",
         "total_rev": "🌍 कुल सकल आय",
         "total_out": "🛑 कुल सकल व्यय",
-        "net_bal_adj": "📈全面 शुद्ध शेष राशि (ऋण समायोजित)",
+        "net_bal_adj": "📈 शुद्ध शेष राशि (ऋण समायोजित)",
         "active_node_lbl": "सक्रिय खाता विवरण:",
         "display_month": "प्रदर्शन माह का चयन करें:",
         "inc_stream": "🟩 कुल प्राप्त आय",
@@ -362,8 +352,6 @@ LANG_DICT = {
         "sec_check_lbl": "पहले सुरक्षा प्रश्न का उत्तर सत्यापित करें:",
         "new_pass_lbl": "नया सुदृढ़ पासवर्ड:",
         "btn_commit_pass": "नया पासवर्ड लागू करें",
-        "new_pin_lbl": "नया द्वि-चरण सुरक्षा पिन:",
-        "btn_commit_pin": "नया पिन लागू करें",
         "family_reg": "👥 परिवार सदस्य खाता पंजीकरण",
         "member_user": "सदस्य का उपयोगकर्ता नाम:",
         "member_pass": "सदस्य का पासवर्ड:",
@@ -405,7 +393,6 @@ LANG_DICT = {
 
 if "app_lang" not in st.session_state: st.session_state["app_lang"] = "English"
 
-# --- TOP LANGUAGE TOGGLE STRIP ---
 lang_col1, lang_col2 = st.columns([8, 2])
 with lang_col2:
     st.session_state["app_lang"] = st.selectbox("🌐 Language / भाषा", ["English", "Hindi"], index=0 if st.session_state["app_lang"] == "English" else 1)
@@ -413,7 +400,6 @@ with lang_col2:
 TXT = LANG_DICT[st.session_state["app_lang"]]
 user_current_ip = get_user_ip()
 
-# --- PHASE 1: LOGIN CONTROL ---
 if not st.session_state["logged_in"]:
     st.title(TXT["login_title"])
     st.markdown("---")
@@ -432,7 +418,6 @@ if not st.session_state["logged_in"]:
                     st.session_state["account_mode"] = mode
                     st.rerun()
                 else: st.error("Invalid credentials / अमान्य विवरण")
-                
         elif auth_choice == TXT["create_acc"]:
             st.subheader(TXT["reg_admin"])
             new_user = st.text_input(TXT["username"]).strip().lower()
@@ -447,13 +432,11 @@ if not st.session_state["logged_in"]:
                     success_reg, db_error_msg = add_user(new_user, new_password, selected_mode, "self")
                     if success_reg: st.success("Account created! Switch to Sign In / खाता निर्मित हुआ।")
                     else: st.error(f"❌ Rejection: {db_error_msg}")
-                    
         elif auth_choice == TXT["forget_pass"]:
             st.subheader(TXT["forget_pass"])
             reset_user = st.text_input(TXT["username"]).strip().lower()
             if reset_user and user_exists(reset_user):
                 assigned_q = get_user_question(reset_user)
-                # PRINCE: Fixed the Syntax Error walrus syntax block completely right here
                 if assigned_q is None or assigned_q == "Not Set": st.error("Security not configured.")
                 else:
                     st.info(f"Question: {assigned_q}")
@@ -468,7 +451,6 @@ if not st.session_state["logged_in"]:
     st.markdown("---")
     st.stop()
 
-# --- PHASE 2: SECURITY CHECKPOINT ---
 current_user = st.session_state["username"]
 user_mode = st.session_state["account_mode"]
 
@@ -506,21 +488,26 @@ if not st.session_state["two_fa_verified"]:
             else: st.error("Error!")
     st.stop()
 
-# --- PHASE 3: MAIN NAVIGATION TABS ---
-st.title(TXT["title"])
-st.markdown(f"*Session: **{current_user.upper()}*** | 🌐 *IP: `{user_current_ip}`*")
-
-main_tabs = st.tabs([TXT["tab_dash"], TXT["tab_entry"], TXT["tab_rec"], TXT["tab_credit"]])
-df_all_data = get_user_transactions(current_user)
-
+# --- MAIN DATABASE PARSING INJECTOR ---
+member_list = get_sub_accounts(current_user)
 credit_given_types = ["Credit Given (To Receive)", "Credit Given (To Receive)", "उधार दिया (लेना है)"]
 credit_taken_types = ["Credit Taken (To Pay)", "Credit Taken (To Pay)", "उधार लिया (देना है)"]
 
+# PRINCE: Combined balance parsing loops fetching live network accounts safely
+combined_users_list = [current_user] + list(member_list)
+res_global_tx = supabase.table("transactions").select("type, amount, username, category").execute()
+
+df_global_mesh = pd.DataFrame(res_global_tx.data) if res_global_tx.data else pd.DataFrame(columns=["type", "amount", "username", "category"])
+df_global_filtered = df_global_mesh[df_global_mesh["username"].isin(combined_users_list)] if not df_global_mesh.empty else pd.DataFrame()
+
 udhaar_net_balance = 0.0
-if not df_all_data.empty:
-    all_lena = df_all_data[df_all_data["type"].isin(credit_given_types)]["amount"].sum()
-    all_dena = df_all_data[df_all_data["type"].isin(credit_taken_types)]["amount"].sum()
+if not df_global_filtered.empty:
+    all_lena = df_global_filtered[df_global_filtered["type"].isin(credit_given_types)]["amount"].sum()
+    all_dena = df_global_filtered[df_global_filtered["type"].isin(credit_taken_types)]["amount"].sum()
     udhaar_net_balance = all_lena - all_dena
+
+# --- NAVIGATION LAYOUT ---
+main_tabs = st.tabs([TXT["tab_dash"], TXT["tab_entry"], TXT["tab_rec"], TXT["tab_credit"]])
 
 # ==========================================
 # TAB 1: SUMMARY DASHBOARD
@@ -533,41 +520,52 @@ with main_tabs[0]:
         g_col1, g_col2, g_col3 = st.columns(3)
         g_col1.metric(TXT["total_rev"], f"₹{g_inc:,}")
         g_col2.metric(TXT["total_out"], f"₹{g_exp:,}")
-        g_col3.metric(TXT["net_bal_adj"], f"₹{g_final_bal:,}")
+        g_final_mesh_bal = g_bal + udhaar_net_balance
+        g_col3.metric(TXT["net_bal_adj"], f"₹{g_final_mesh_bal:,}")
         st.markdown("---")
 
-    member_list = get_sub_accounts(current_user)
     view_target_user = current_user
+    is_viewing_self = True
+    
     if user_mode == "Multiple" and member_list:
-        selected_view = st.selectbox("Select Account Node:", ["Personal Only"] + [m.upper() for m in member_list])
-        if selected_view != "Personal Only": view_target_user = selected_view.lower()
+        selected_view = st.selectbox("Select Account Node:", ["Personal Only"] + [m.upper() for m in member_list], key="view_selector_dashboard")
+        if selected_view != "Personal Only": 
+            view_target_user = selected_view.lower()
+            is_viewing_self = False
 
-    df_target = get_user_transactions(view_target_user)
+    df_target = df_global_mesh[df_global_mesh["username"] == view_target_user].copy() if not df_global_mesh.empty else pd.DataFrame()
     st.markdown(f"### {TXT['active_node_lbl']} **{view_target_user.upper()}**")
     
-    if not df_target.empty:
-        df_target["date"] = pd.to_datetime(df_target["date"])
-        df_target["Month"] = df_target["date"].dt.strftime('%B %Y')
-        selected_month = st.selectbox(TXT["display_month"], df_target["Month"].unique(), key=f"m_{view_target_user}")
-        df_filtered = df_target[df_target["Month"] == selected_month].copy()
-        
-        my_inc = df_filtered[df_filtered["type"].isin(["Income", "आय"])]["amount"].sum()
-        my_exp = df_filtered[df_filtered["type"].isin(["Expense", "व्यय"])]["amount"].sum()
-        t_lena = df_filtered[df_filtered["type"].isin(credit_given_types)]["amount"].sum()
-        t_dena = df_filtered[df_filtered["type"].isin(credit_taken_types)]["amount"].sum()
-        my_final_bal = (my_inc - my_exp) + (t_lena - t_dena)
-        
-        col1, col2, col3 = st.columns(3)
-        col1.metric(TXT["inc_stream"], f"₹{my_inc:,}")
-        col2.metric(TXT["exp_drain"], f"₹{my_exp:,}")
-        col3.metric(TXT["net_balance"], f"₹{my_final_bal:,}")
-        
-        st.markdown("---")
-        st.subheader(TXT["exp_analysis"])
-        exp_df = df_filtered[df_filtered["type"].isin(["Expense", "व्यय"])]
-        if not exp_df.empty:
-            cat_totals = exp_df.groupby("category")["amount"].sum().reset_index()
-            st.bar_chart(data=cat_totals, x="category", y="amount", color="#ff4b4b", use_container_width=True)
+    if not df_target.empty and "amount" in df_target.columns:
+        # Secure placeholder row bypass logic if profile created token exists alone
+        df_clean_target = df_target[df_target["type"] != "Credit Account Initialized"].copy()
+        if not df_clean_target.empty:
+            res_live_user = supabase.table("transactions").select("id, date, type, category, amount, payment_method, notes, log_status").eq("username", view_target_user).execute()
+            df_target_full = pd.DataFrame(res_live_user.data)
+            df_target_full["date"] = pd.to_datetime(df_target_full["date"])
+            df_target_full["Month"] = df_target_full["date"].dt.strftime('%B %Y')
+            
+            selected_month = st.selectbox(TXT["display_month"], df_target_full["Month"].unique(), key=f"m_{view_target_user}")
+            df_filtered = df_target_full[df_target_full["Month"] == selected_month].copy()
+            
+            my_inc = df_filtered[df_filtered["type"].isin(["Income", "आय"])]["amount"].sum()
+            my_exp = df_filtered[df_filtered["type"].isin(["Expense", "व्यय"])]["amount"].sum()
+            t_lena = df_filtered[df_filtered["type"].isin(credit_given_types)]["amount"].sum()
+            t_dena = df_filtered[df_filtered["type"].isin(credit_taken_types)]["amount"].sum()
+            my_final_bal = (my_inc - my_exp) + (t_lena - t_dena)
+            
+            col1, col2, col3 = st.columns(3)
+            col1.metric(TXT["inc_stream"], f"₹{my_inc:,}")
+            col2.metric(TXT["exp_drain"], f"₹{my_exp:,}")
+            col3.metric(TXT["net_balance"], f"₹{my_final_bal:,}")
+            
+            st.markdown("---")
+            st.subheader(TXT["exp_analysis"])
+            exp_df = df_filtered[df_filtered["type"].isin(["Expense", "व्यय"])]
+            if not exp_df.empty:
+                cat_totals = exp_df.groupby("category")["amount"].sum().reset_index()
+                st.bar_chart(data=cat_totals, x="category", y="amount", color="#ff4b4b", use_container_width=True)
+        else: st.info("No logs entry registered inside this node layer yet.")
     else: st.info("No records inside this node yet.")
 
     st.markdown("---")
@@ -588,14 +586,12 @@ with main_tabs[0]:
                 sub_pass = st.text_input(TXT["member_pass"], type="password")
                 if st.button(TXT["btn_add_member"], use_container_width=True):
                     if add_user(sub_name, sub_pass, "Single", current_user)[0]: st.success("Added!")
-            
-            # PRINCE: Whitelisted member deletion layout block safely restored right here
             if member_list:
                 with st.expander(TXT["del_member_sett"]):
                     to_delete = st.selectbox(TXT["select_del_mem"], member_list)
                     if st.button(TXT["btn_confirm_del_mem"], type="primary", use_container_width=True):
                         delete_user_account(to_delete)
-                        st.success("Account completely erased from network matrix data framework!")
+                        st.success("Erased completely!")
                         st.rerun()
 
 # ==========================================
@@ -628,12 +624,24 @@ with main_tabs[1]:
             st.rerun()
 
 # ==========================================
-# TAB 3: LEDGER STATEMENT
+# TAB 3: LEDGER STATEMENT (PRINCE: RESTORED FULL EDIT/MEMBER ENGINE)
 # ==========================================
 with main_tabs[2]:
     st.markdown(TXT["cashbook_title"])
-    if not df_all_data.empty:
-        df_cash_only = df_all_data[df_all_data["type"].isin(["Income", "Expense"])].copy()
+    
+    view_target_user_rec = current_user
+    is_viewing_self_rec = True
+    
+    if user_mode == "Multiple" and member_list:
+        selected_view_rec = st.selectbox("Select Target Node parameters to Audit:", ["My Personal Entries"] + [m.upper() for m in member_list], key="view_selector_records_tab")
+        if selected_view_rec != "My Personal Entries":
+            view_target_user_rec = selected_view_rec.lower()
+            is_viewing_self_rec = False
+
+    df_user_rec = get_user_transactions(view_target_user_rec)
+    
+    if not df_user_rec.empty:
+        df_cash_only = df_user_rec[df_user_rec["type"].isin(["Income", "Expense"])].copy()
         if not df_cash_only.empty:
             df_cash_only["date"] = pd.to_datetime(df_cash_only["date"])
             df_cash_only["Month"] = df_cash_only["date"].dt.strftime('%B %Y')
@@ -643,16 +651,48 @@ with main_tabs[2]:
             for index, row in df_filtered_rec.sort_values(by="date", ascending=False).iterrows():
                 tag_color = "🟩 [Income]" if row['type'] == "Income" else "🟥 [Expense]"
                 method_label = "🏪 Cash" if row['payment_method'] == "Cash" else "🏦 Bank"
+                
                 with st.expander(f"Date: {row['date'].strftime('%Y-%m-%d')} | {tag_color} | **{row['category']}** | {method_label} | **₹{row['amount']:,}**"):
-                    st.markdown(f"**📝 Description:** *{row['notes']}*")
-                    if st.button(TXT["btn_del"], key=f"del_c_{row['id']}", type="primary"):
-                        delete_transaction(row['id'])
-                        st.toast("Deleted!")
-                        st.rerun()
-        else: st.info("No Cash entries logged yet.")
+                    st.markdown(f"**📝 Description Notes:** *{row['notes']}*")
+                    st.markdown(f"**Tracking System Tag:** `[{row['log_status']}]`")
+                    
+                    if is_viewing_self_rec:
+                        st.markdown("---")
+                        edit_col, delete_col = st.columns(2)
+                        with edit_col:
+                            if st.button("✏️ Edit Record", key=f"btn_ed_cash_{row['id']}", use_container_width=True):
+                                st.session_state[f"show_edit_cash_{row['id']}"] = True
+                        with delete_col:
+                            if st.button(TXT["btn_del"], key=f"del_c_{row['id']}", type="primary", use_container_width=True):
+                                delete_transaction(row['id'])
+                                st.toast("Deleted!")
+                                st.rerun()
+                                
+                        if f"show_edit_cash_{row['id']}" in st.session_state and st.session_state[f"show_edit_cash_{row['id']}"]:
+                            st.markdown("---")
+                            edit_cat = st.text_input("Category Name:", value=row['category'], key=f"in_cat_cash_{row['id']}")
+                            edit_amt = st.number_input("Amount (INR):", value=float(row['amount']), key=f"in_amt_cash_{row['id']}")
+                            edit_type = st.selectbox("Type:", ["Expense", "Income"], index=0 if row['type'] == "Expense" else 1, key=f"in_type_cash_{row['id']}")
+                            edit_method = st.selectbox("Method:", ["Cash", "Bank (Online/UPI)"], index=0 if row['payment_method'] == "Cash" else 1, key=f"in_meth_cash_{row['id']}")
+                            edit_notes = st.text_area("Notes Data:", value=row['notes'], key=f"in_note_cash_{row['id']}")
+                            
+                            save_col, cancel_col = st.columns(2)
+                            with save_col:
+                                if st.button("Commit Changes", key=f"save_ed_cash_{row['id']}", use_container_width=True):
+                                    update_transaction(row['id'], row['date'].strftime('%Y-%m-%d'), edit_type, edit_cat.title(), edit_amt, edit_method, edit_notes, "Edited")
+                                    st.session_state[f"show_edit_cash_{row['id']}"] = False
+                                    st.rerun()
+                            with cancel_col:
+                                if st.button("Drop Token Stream", key=f"cancel_ed_cash_{row['id']}", use_container_width=True):
+                                    st.session_state[f"show_edit_cash_{row['id']}"] = False
+                                    st.rerun()
+                    else:
+                        st.markdown("<span style='color: #888; font-size: 0.85em;'>🔒 Member Entry Node (Read-Only Mode)</span>", unsafe_allow_html=True)
+        else: st.info("No Cash records inside this timeframe layout node frame.")
+    else: st.info("No Cash entries logged yet.")
 
 # ==========================================
-# TAB 4: CREDIT LEDGER (UDHAAR KHATA)
+# TAB 4: CREDIT LEDGER (PRINCE: RESTORED FULL MEMBER VIEW ENGINE)
 # ==========================================
 with main_tabs[3]:
     st.header(TXT["credit_title"])
@@ -665,28 +705,38 @@ with main_tabs[3]:
                 st.rerun()
                 
     st.markdown("---")
-    all_profiles = []
-    if not df_all_data.empty:
-        all_profiles = sorted(df_all_data[df_all_data["type"] == "Credit Account Initialized"]["category"].unique())
+    
+    view_target_user_credit = current_user
+    is_viewing_self_credit = True
+    
+    if user_mode == "Multiple" and member_list:
+        selected_view_credit = st.selectbox("Select Client Data Matrix Node to open:", ["My Personal Debts"] + [m.upper() for m in member_list], key="view_selector_credit_tab")
+        if selected_view_credit != "My Personal Debts":
+            view_target_user_credit = selected_view_credit.lower()
+            is_viewing_self_credit = False
+
+    df_user_credit_mesh = get_user_transactions(view_target_user_credit)
+    all_profiles = sorted(df_user_credit_mesh[df_user_credit_mesh["type"] == "Credit Account Initialized"]["category"].unique()) if not df_user_credit_mesh.empty else []
         
-    if not all_profiles: st.info("No profiles found.")
+    if not all_profiles: st.info("No credit profile parameters found inside this matrix path link.")
     else:
         selected_person = st.selectbox(TXT["select_profile"], all_profiles)
-        df_person_history = df_all_data[df_all_data["category"] == selected_person].copy()
+        df_person_history = df_user_credit_mesh[df_user_credit_mesh["category"] == selected_person].copy()
         
         p_given = df_person_history[df_person_history["type"].isin(["Credit Given (To Receive)", "Udhaar Diya (Lena)"])]["amount"].sum()
         p_taken = df_person_history[df_person_history["type"].isin(["Credit Taken (To Pay)", "Udhaar Liya (Dena)"])]["amount"].sum()
         p_net_balance = p_given - p_taken
         
         st.markdown(f"### {TXT['p_statement_title']} **{selected_person.upper()}**")
+        st.markdown(f"*Account Owner Source Node Frame: **{view_target_user_credit.upper()}***")
         
-        # PRINCE: Pure interactive credit khata account deletion button protocol setup right here
-        if st.button(TXT["btn_del_profile"], type="primary", use_container_width=True, key=f"del_profile_{selected_person}"):
-            delete_credit_profile_completely(current_user, selected_person)
-            st.toast("Profile Account completely erased!")
-            st.rerun()
+        if is_viewing_self_credit:
+            if st.button(TXT["btn_del_profile"], type="primary", use_container_width=True, key=f"del_profile_{selected_person}"):
+                delete_credit_profile_completely(current_user, selected_person)
+                st.toast("Profile Account completely erased!")
+                st.rerun()
+            st.markdown("---")
             
-        st.markdown("---")
         p_col1, p_col2, p_col3 = st.columns(3)
         p_col1.markdown(f"<div style='font-size:1.1em;'>{TXT['p_given']}: <b>₹{p_given:,}</b></div>", unsafe_allow_html=True)
         p_col2.markdown(f"<div style='font-size:1.1em;'>{TXT['p_taken']}: <b>₹{p_taken:,}</b></div>", unsafe_allow_html=True)
@@ -696,23 +746,28 @@ with main_tabs[3]:
         else: st.metric(TXT["p_settled"], "₹0")
             
         st.markdown("---")
-        st.markdown(f"➕ **{TXT['log_inside_ledger']} ({selected_person})**")
-        with st.form(f"f_p_{selected_person}", clear_on_submit=True):
-            sub_col1, sub_col2 = st.columns(2)
-            with sub_col1:
-                u_date = st.date_input("Date", datetime.now(), key=f"d_{selected_person}")
-                protocol_options = ["Credit Given (To Receive)", "Credit Taken (To Pay)"] if st.session_state["app_lang"] == "English" else ["उधार दिया (लेना है)", "उधार लिया (देना है)"]
-                u_type = st.selectbox(TXT["action_protocol"], protocol_options, key=f"t_{selected_person}")
-            with sub_col2:
-                u_amount = st.number_input(TXT["tx_amt"], min_value=1.0, step=1.0, key=f"a_{selected_person}")
-                u_notes = st.text_input(TXT["remarks_lbl"], key=f"n_{selected_person}")
-            
-            if st.form_submit_button(TXT["btn_submit_ledger"], use_container_width=True):
-                db_credit_type = "Credit Given (To Receive)" if u_type in ["Credit Given (To Receive)", "उधार दिया (लेना है)"] else "Credit Taken (To Pay)"
-                save_transaction(current_user, u_date.strftime('%Y-%m-%d'), db_credit_type, selected_person, u_amount, "Cash", u_notes, "Active Debt")
-                st.toast("Saved!")
-                st.rerun()
+        
+        if is_viewing_self_credit:
+            st.markdown(f"➕ **{TXT['log_inside_ledger']} ({selected_person})**")
+            with st.form(f"f_p_{selected_person}", clear_on_submit=True):
+                sub_col1, sub_col2 = st.columns(2)
+                with sub_col1:
+                    u_date = st.date_input("Date", datetime.now(), key=f"d_{selected_person}")
+                    protocol_options = ["Credit Given (To Receive)", "Credit Taken (To Pay)"] if st.session_state["app_lang"] == "English" else ["उधार दिया (लेना है)", "उधार लिया (देना है)"]
+                    u_type = st.selectbox(TXT["action_protocol"], protocol_options, key=f"t_{selected_person}")
+                with sub_col2:
+                    u_amount = st.number_input(TXT["tx_amt"], min_value=1.0, step=1.0, key=f"a_{selected_person}")
+                    u_notes = st.text_input(TXT["remarks_lbl"], key=f"n_{selected_person}")
                 
+                if st.form_submit_button(TXT["btn_submit_ledger"], use_container_width=True):
+                    db_credit_type = "Credit Given (To Receive)" if u_type in ["Credit Given (To Receive)", "उधार दिया (लेना है)"] else "Credit Taken (To Pay)"
+                    save_transaction(current_user, u_date.strftime('%Y-%m-%d'), db_credit_type, selected_person, u_amount, "Cash", u_notes, "Active Debt")
+                    st.toast("Saved!")
+                    st.rerun()
+        else:
+            st.markdown("<span style='color: #ff9800; font-size: 0.9em;'>🔒 Append Entry Disabled (Viewing Member Credit Profile Account)</span>", unsafe_allow_html=True)
+            st.markdown("---")
+
         st.markdown(TXT["history_title"])
         df_logs_only = df_person_history[df_person_history["type"].str.contains("Credit Given|Credit Taken|Udhaar")].copy()
         if not df_logs_only.empty:
@@ -720,10 +775,13 @@ with main_tabs[3]:
                 log_tag = "🔴 Given" if "Given" in r_row["type"] or "Diya" in r_row["type"] else "🟢 Taken"
                 with st.expander(f"Date: {r_row['date']} | {log_tag} | **₹{r_row['amount']:,}**"):
                     st.markdown(f"*{r_row['notes']}*")
-                    if st.button(TXT["btn_del"], key=f"del_p_{r_row['id']}", type="primary"):
-                        delete_transaction(r_row['id'])
-                        st.toast("Removed!")
-                        st.rerun()
+                    if is_viewing_self_credit:
+                        if st.button(TXT["btn_del"], key=f"del_p_{r_row['id']}", type="primary"):
+                            delete_transaction(r_row['id'])
+                            st.toast("Removed!")
+                            st.rerun()
+                    else:
+                        st.markdown("<span style='color: #888; font-size: 0.85em;'>🔒 Member Credit Log (Read-Only Mode)</span>", unsafe_allow_html=True)
 
 st.markdown("---")
 bot_col1, bot_col2 = st.columns(2)
