@@ -191,6 +191,7 @@ def get_global_summary_for_admin(admin_username):
 # --- STREAMLIT CONFIGURATION ---
 st.set_page_config(page_title="Professional Secure Ledger", layout="wide", page_icon="💰")
 
+# PRINCE: JavaScript Engine Jo Browser Ke LocalStorage Se Device Recognition Handle Karega
 components.html("""
 <script>
     function eraseLogosAndFixScroll() {
@@ -206,8 +207,52 @@ components.html("""
         window.parent.document.documentElement.style.overscrollBehaviorY = 'contain';
     }
     setInterval(eraseLogosAndFixScroll, 50);
+
+    // Secure Device Memory Sync Engine
+    window.addEventListener('message', function(e) {
+        if (e.data.type === 'SAVE_DEVICE_TOKEN') {
+            localStorage.setItem('ledger_device_user', e.data.username);
+            localStorage.setItem('ledger_device_expiry', e.data.expiry);
+        }
+        if (e.data.type === 'CLEAR_DEVICE') {
+            localStorage.removeItem('ledger_device_user');
+            localStorage.removeItem('ledger_device_expiry');
+        }
+    });
+
+    // Auto-login check loop
+    function checkDeviceSaved() {
+        var user = localStorage.getItem('ledger_device_user');
+        var exp = localStorage.getItem('ledger_device_expiry');
+        if (user && exp) {
+            if (new Date().getTime() < parseInt(exp)) {
+                window.parent.postMessage({type: 'AUTO_LOGIN_TRIGGER', user: user}, '*');
+            } else {
+                localStorage.removeItem('ledger_device_user');
+                localStorage.removeItem('ledger_device_expiry');
+            }
+        }
+    }
+    setTimeout(checkDeviceSaved, 500);
 </script>
 """, height=0)
+
+# Streamlit bridge window detection protocol
+if "js_auto_user" not in st.session_state:
+    st.session_state["js_auto_user"] = None
+
+# Query param bridge logic
+q_params = st.query_params
+if "autologin" in q_params and not st.session_state.get("logged_in", False):
+    st.session_state["logged_in"] = True
+    st.session_state["username"] = q_params["autologin"]
+    st.session_state["two_fa_verified"] = True
+    st.session_state["account_mode"] = "Multiple"  # Default fallback, login check drops update
+    res = supabase.table("users").select("account_mode").eq("username", q_params["autologin"]).execute()
+    if res.data:
+        st.session_state["account_mode"] = res.data[0]["account_mode"]
+    st.query_params.clear()
+    st.rerun()
 
 st.markdown("""
     <style>
@@ -226,11 +271,6 @@ if "logged_in" not in st.session_state: st.session_state["logged_in"] = False
 if "two_fa_verified" not in st.session_state: st.session_state["two_fa_verified"] = False
 if "username" not in st.session_state: st.session_state["username"] = ""
 if "account_mode" not in st.session_state: st.session_state["account_mode"] = "Single"
-if "session_expiry" not in st.session_state: st.session_state["session_expiry"] = None
-
-if st.session_state["logged_in"] and st.session_state["session_expiry"]:
-    if datetime.now() < st.session_state["session_expiry"]:
-        st.session_state["two_fa_verified"] = True
 
 SECURITY_QUESTIONS = [
     "What is the name of your first school?",
@@ -243,6 +283,28 @@ SECURITY_QUESTIONS = [
 if not st.session_state["logged_in"]:
     st.title("🔒 SECURED LEDGER SYSTEM")
     st.markdown("---")
+    
+    # Transparent javascript proxy injection trigger point
+    st.markdown("""
+        <div style='background: #1e293b; padding: 12px; border-radius: 8px; margin-bottom: 15px; font-size:0.9em; color:#94a3b8;'>
+            🔄 Checking for trusted device token... If this is a saved device, you will be bypassed automatically in 2 seconds.
+        </div>
+    """, unsafe_allow_html=True)
+    
+    # HTML event capture mechanism
+    html_bridge = """
+    <script>
+        window.addEventListener('message', function(e) {
+            if(e.data.type === 'AUTO_LOGIN_TRIGGER') {
+                const url = new URL(window.parent.location.href);
+                url.searchParams.set('autologin', e.data.user);
+                window.parent.location.href = url.href;
+            }
+        });
+    </script>
+    """
+    components.html(html_bridge, height=0)
+
     auth_choice = st.radio("Select Action:", ["Sign In", "Create new Account", "Forget Password"], horizontal=True)
     col1, _ = st.columns([1, 2])
     
@@ -320,7 +382,15 @@ if not check_user_security_setup(current_user):
             else:
                 save_security_setup(current_user, chosen_q, answer_q, two_fa_code)
                 st.session_state["two_fa_verified"] = True
-                st.session_state["session_expiry"] = datetime.now() + timedelta(days=3)
+                
+                # Device recognize automatically token save injection point (30 Days Memory)
+                future_expiry_ms = int((datetime.now() + timedelta(days=30)).timestamp() * 1000)
+                components.html(f"""
+                <script>
+                    window.parent.postMessage({{type: 'SAVE_DEVICE_TOKEN', username: '{current_user}', expiry: '{future_expiry_ms}'}}, '*');
+                </script>
+                """, height=0)
+                
                 st.rerun()
     st.stop()
 
@@ -329,13 +399,22 @@ if not st.session_state["two_fa_verified"]:
     col_2fa, _ = st.columns([1, 2])
     with col_2fa:
         pin_entry = st.text_input("Enter Your 2-Step PIN:", type="password", max_chars=6)
-        trust_device = st.checkbox("Keep me logged in on this device for 3 days")
+        trust_device = st.checkbox("Trust this device (Don't ask PIN again for 30 days)", value=True)
         if st.button("VERIFY SECURE PIN", use_container_width=True):
             res = supabase.table("users").select("two_fa_pin").eq("username", current_user).execute()
             db_pin = res.data[0]["two_fa_pin"] if res.data else ""
             if make_hashes(pin_entry) == db_pin:
                 st.session_state["two_fa_verified"] = True
-                if trust_device: st.session_state["session_expiry"] = datetime.now() + timedelta(days=3)
+                
+                if trust_device:
+                    # Device trusted calculation matrix payload (30 days persistence)
+                    future_expiry_ms = int((datetime.now() + timedelta(days=30)).timestamp() * 1000)
+                    components.html(f"""
+                    <script>
+                        window.parent.postMessage({{type: 'SAVE_DEVICE_TOKEN', username: '{current_user}', expiry: '{future_expiry_ms}'}}, '*');
+                    </script>
+                    """, height=0)
+                    
                 st.toast("Access Cleared!")
                 st.rerun()
             else: st.error("Invalid Security PIN!")
@@ -349,7 +428,6 @@ if not st.session_state["two_fa_verified"]:
 st.title("📊 FINANCIAL LEDGER ARCHITECTURE")
 st.markdown(f"*Secure Session Active: **{current_user.upper()}***")
 
-# PRINCE: Mobile navigation ko clean karne ke liye yahan main tabs system add kar diya ha
 main_tabs = st.tabs(["🏠 Dashboard Matrix", "📝 Log New Entry", "🔍 Statement Records"])
 
 # ==========================================
@@ -501,7 +579,6 @@ with main_tabs[1]:
 with main_tabs[2]:
     st.markdown("### 🔍 Live Statement Ledger Records")
     
-    # Backup trigger engine at top of records
     df_all_backup = get_user_transactions(current_user)
     if not df_all_backup.empty:
         buffer = io.BytesIO()
@@ -591,6 +668,12 @@ with bot_col1:
     st.info(f"📧 **Any problem please contact us:**\n\n📩 **{MY_EMAIL}**")
 with bot_col2:
     if st.button("🔒 SECURE TERMINAL SIGN OUT CONNECTION", use_container_width=True, type="primary", key="signout_footer_btn"):
+        # Clear localstorage engine session on logout
+        components.html("""
+        <script>
+            window.parent.postMessage({type: 'CLEAR_DEVICE'}, '*');
+        </script>
+        """, height=0)
         st.session_state["logged_in"] = False
         st.session_state["two_fa_verified"] = False
         st.rerun()
