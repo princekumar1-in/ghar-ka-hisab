@@ -1,0 +1,16 @@
+name: Keep Streamlit App Awake
+
+on:
+  schedule:
+    # Yeh har 10 minute mein automatic chalega (24/7)
+    - cron: '*/10 * * * *'
+  workflow_dispatch: # Manual chalane ke liye
+
+jobs:
+  ping_app:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Send Genuine User Request to Streamlit
+        run: |
+          curl -A "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" -L "https://hisab-kitab-p.streamlit.app/"
+          
