@@ -440,7 +440,7 @@ if not st.session_state["logged_in"]:
             reset_user = st.text_input(TXT["username"]).strip().lower()
             if reset_user and user_exists(reset_user):
                 assigned_q = get_user_question(reset_user)
-                if assigned_q is None or assigned_by_sys := "Not Set": st.error("Security not configured.")
+                if assigned_q is None or assigned_q == "Not Set": st.error("Security not configured.")
                 else:
                     st.info(f"Question: {assigned_q}")
                     user_ans = st.text_input(TXT["sec_a_lbl"], type="password")
