@@ -176,6 +176,13 @@ def delete_transaction(t_id):
     except Exception:
         pass
 
+# PRINCE: Pure database profile clearing protocol for specific name node
+def delete_credit_profile_completely(username, person_name):
+    try:
+        supabase.table("transactions").delete().eq("username", username).eq("category", person_name).execute()
+    except Exception:
+        pass
+
 def get_global_summary_for_admin(admin_username):
     try:
         subs = get_sub_accounts(admin_username)
@@ -186,7 +193,6 @@ def get_global_summary_for_admin(admin_username):
         df_filtered = df[df["username"].isin(combined_users)]
         if df_filtered.empty: return 0, 0, 0
         
-        # Mapping dual translation compliance types to get precise cloud sums
         inc = df_filtered[df_filtered["type"].isin(["Income", "आय"])]["amount"].sum()
         exp = df_filtered[df_filtered["type"].isin(["Expense", "व्यय"])]["amount"].sum()
         return inc, exp, (inc - exp)
@@ -225,7 +231,13 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# --- PRINCE: PURE DUAL DICTIONARY MATRIX L10N LAYER ---
+if "logged_in" not in st.session_state: st.session_state["logged_in"] = False
+if "two_fa_verified" not in st.session_state: st.session_state["two_fa_verified"] = False
+if "username" not in st.session_state: st.session_state["username"] = ""
+if "account_mode" not in st.session_state: st.session_state["account_mode"] = "Single"
+if "trusted_ip_cache" not in st.session_state: st.session_state["trusted_ip_cache"] = None
+
+# --- PRINCE: MULTI LANGUAGE DICTIONARY CONFIG ---
 LANG_DICT = {
     "English": {
         "title": "📊 FINANCIAL LEDGER ARCHITECTURE",
@@ -275,6 +287,9 @@ LANG_DICT = {
         "member_user": "Member Username:",
         "member_pass": "Member Password:",
         "btn_add_member": "Add Member Account",
+        "del_member_sett": "🗑️ Delete Member Account",
+        "select_del_mem": "Select Account To Delete:",
+        "btn_confirm_del_mem": "CONFIRM Delete Account",
         "log_tx_title": "### 📝 Log New Transaction Entry",
         "tx_date": "Transaction Date",
         "tx_type": "Transaction Type Mode",
@@ -301,6 +316,7 @@ LANG_DICT = {
         "btn_submit_ledger": "SUBMIT TO LEDGER",
         "history_title": "#### 🕒 Transaction History Ledger Log",
         "btn_del": "Delete",
+        "btn_del_profile": "🗑️ DELETE THIS CREDIT PROFILE PERMANENTLY",
         "support_desk": "Support Desk:",
         "btn_signout": "🔒 SECURE SIGN OUT TERMINAL"
     },
@@ -334,7 +350,7 @@ LANG_DICT = {
         "net_matrix_title": "🌐 समेकित कुल पारिवारिक संतुलन",
         "total_rev": "🌍 कुल सकल आय",
         "total_out": "🛑 कुल सकल व्यय",
-        "net_bal_adj": "📈 शुद्ध शेष राशि (ऋण समायोजित)",
+        "net_bal_adj": "📈全面 शुद्ध शेष राशि (ऋण समायोजित)",
         "active_node_lbl": "सक्रिय खाता विवरण:",
         "display_month": "प्रदर्शन माह का चयन करें:",
         "inc_stream": "🟩 कुल प्राप्त आय",
@@ -352,6 +368,9 @@ LANG_DICT = {
         "member_user": "सदस्य का उपयोगकर्ता नाम:",
         "member_pass": "सदस्य का पासवर्ड:",
         "btn_add_member": "नया सदस्य खाता जोड़ें",
+        "del_member_sett": "🗑️ सदस्य खाता हटाए",
+        "select_del_mem": "हटाने के लिए खाता चुनें:",
+        "btn_confirm_del_mem": "खाता हटाने की पुष्टि करें",
         "log_tx_title": "### 📝 नई वित्तीय प्रविष्टि दर्ज करें",
         "tx_date": "लेनदेन की तिथि",
         "tx_type": "लेनदेन का प्रकार",
@@ -378,18 +397,12 @@ LANG_DICT = {
         "btn_submit_ledger": "रिकॉर्ड खाते में सबमिट करें",
         "history_title": "#### 🕒 इस खाते का ऐतिहासिक बहीखाता लॉग",
         "btn_del": "हटाएं",
+        "btn_del_profile": "🗑️ इस ऋण खाता प्रोफ़ाइल को हमेशा के लिए हटाएं",
         "support_desk": "सहायता केंद्र:",
         "btn_signout": "🔒 सुरक्षित लॉगआउट कनेक्शन"
     }
 }
 
-if "logged_in" not in st.session_state: st.session_state["logged_in"] = False
-if "two_fa_verified" not in st.session_state: st.session_state["two_fa_verified"] = False
-if "username" not in st.session_state: st.session_state["username"] = ""
-if "account_mode" not in st.session_state: st.session_state["account_mode"] = "Single"
-if "trusted_ip_cache" not in st.session_state: st.session_state["trusted_ip_cache"] = None
-
-# Pure Global Language state hook
 if "app_lang" not in st.session_state: st.session_state["app_lang"] = "English"
 
 # --- TOP LANGUAGE TOGGLE STRIP ---
@@ -440,6 +453,7 @@ if not st.session_state["logged_in"]:
             reset_user = st.text_input(TXT["username"]).strip().lower()
             if reset_user and user_exists(reset_user):
                 assigned_q = get_user_question(reset_user)
+                # PRINCE: Fixed the Syntax Error walrus syntax block completely right here
                 if assigned_q is None or assigned_q == "Not Set": st.error("Security not configured.")
                 else:
                     st.info(f"Question: {assigned_q}")
@@ -499,7 +513,6 @@ st.markdown(f"*Session: **{current_user.upper()}*** | 🌐 *IP: `{user_current_i
 main_tabs = st.tabs([TXT["tab_dash"], TXT["tab_entry"], TXT["tab_rec"], TXT["tab_credit"]])
 df_all_data = get_user_transactions(current_user)
 
-# Credit alignment engine matching locale strings
 credit_given_types = ["Credit Given (To Receive)", "Credit Given (To Receive)", "उधार दिया (लेना है)"]
 credit_taken_types = ["Credit Taken (To Pay)", "Credit Taken (To Pay)", "उधार लिया (देना है)"]
 
@@ -575,6 +588,15 @@ with main_tabs[0]:
                 sub_pass = st.text_input(TXT["member_pass"], type="password")
                 if st.button(TXT["btn_add_member"], use_container_width=True):
                     if add_user(sub_name, sub_pass, "Single", current_user)[0]: st.success("Added!")
+            
+            # PRINCE: Whitelisted member deletion layout block safely restored right here
+            if member_list:
+                with st.expander(TXT["del_member_sett"]):
+                    to_delete = st.selectbox(TXT["select_del_mem"], member_list)
+                    if st.button(TXT["btn_confirm_del_mem"], type="primary", use_container_width=True):
+                        delete_user_account(to_delete)
+                        st.success("Account completely erased from network matrix data framework!")
+                        st.rerun()
 
 # ==========================================
 # TAB 2: GENERAL ENTRY
@@ -597,7 +619,6 @@ with main_tabs[1]:
     if submit_btn:
         if not category_input.strip(): st.error("Error Parameters!")
         else:
-            # Map type back to database schema standards symmetrically
             mapped_type = "Income" if type_input in ["Income", "आय"] else "Expense"
             today_str = datetime.now().strftime('%Y-%m-%d')
             selected_date_str = date_input.strftime('%Y-%m-%d')
@@ -658,6 +679,14 @@ with main_tabs[3]:
         p_net_balance = p_given - p_taken
         
         st.markdown(f"### {TXT['p_statement_title']} **{selected_person.upper()}**")
+        
+        # PRINCE: Pure interactive credit khata account deletion button protocol setup right here
+        if st.button(TXT["btn_del_profile"], type="primary", use_container_width=True, key=f"del_profile_{selected_person}"):
+            delete_credit_profile_completely(current_user, selected_person)
+            st.toast("Profile Account completely erased!")
+            st.rerun()
+            
+        st.markdown("---")
         p_col1, p_col2, p_col3 = st.columns(3)
         p_col1.markdown(f"<div style='font-size:1.1em;'>{TXT['p_given']}: <b>₹{p_given:,}</b></div>", unsafe_allow_html=True)
         p_col2.markdown(f"<div style='font-size:1.1em;'>{TXT['p_taken']}: <b>₹{p_taken:,}</b></div>", unsafe_allow_html=True)
@@ -679,7 +708,6 @@ with main_tabs[3]:
                 u_notes = st.text_input(TXT["remarks_lbl"], key=f"n_{selected_person}")
             
             if st.form_submit_button(TXT["btn_submit_ledger"], use_container_width=True):
-                # Map systemic backend translation storage schemas
                 db_credit_type = "Credit Given (To Receive)" if u_type in ["Credit Given (To Receive)", "उधार दिया (लेना है)"] else "Credit Taken (To Pay)"
                 save_transaction(current_user, u_date.strftime('%Y-%m-%d'), db_credit_type, selected_person, u_amount, "Cash", u_notes, "Active Debt")
                 st.toast("Saved!")
