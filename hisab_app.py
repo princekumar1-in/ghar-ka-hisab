@@ -8,6 +8,17 @@ import streamlit.components.v1 as components
 from datetime import datetime, timedelta
 from supabase import create_client, Client
 
+# --- STREAMLIT INITIAL INITIALIZATION (MUST BE BEFORE ANY CODES) ---
+st.set_page_config(page_title="Professional Ledger", layout="wide", page_icon="💰")
+
+# PRINCE: Session State variables ko sabse upar daal diya hai taaki KeyError kabhi na aaye
+if "logged_in" not in st.session_state: st.session_state["logged_in"] = False
+if "two_fa_verified" not in st.session_state: st.session_state["two_fa_verified"] = False
+if "username" not in st.session_state: st.session_state["username"] = ""
+if "account_mode" not in st.session_state: st.session_state["account_mode"] = "Single"
+if "trusted_ip_cache" not in st.session_state: st.session_state["trusted_ip_cache"] = None
+if "app_lang" not in st.session_state: st.session_state["app_lang"] = "English"
+
 # --- CLOUD DATABASE MASTER CONNECTION ---
 SUPABASE_URL = "https://vdfmnzvtsvtnzduilgfo.supabase.co"
 SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZkZm1uenZ0c3Z0bnpkdWlsZ2ZvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIxMTA0NDMsImV4cCI6MjA5NzY4NjQ0M30.uSM9AM6lYGo8Q9NmpFSgrGR_osnBpXHjkROaCZjWrwg"
@@ -198,9 +209,6 @@ def get_global_summary_for_admin(admin_username):
     except Exception:
         return 0, 0, 0
 
-# --- STREAMLIT CONFIGURATION ---
-st.set_page_config(page_title="Professional Ledger", layout="wide", page_icon="💰")
-
 components.html("""
 <script>
     function eraseLogosAndFixScroll() {
@@ -230,6 +238,7 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
+# --- PRINCE: TRANSLATION REGISTER ---
 LANG_DICT = {
     "English": {
         "title": "📊 FINANCIAL LEDGER ARCHITECTURE",
@@ -391,15 +400,16 @@ LANG_DICT = {
     }
 }
 
-if "app_lang" not in st.session_state: st.session_state["app_lang"] = "English"
-
+# --- TOP LANGUAGE TOGGLE STRIP ---
 lang_col1, lang_col2 = st.columns([8, 2])
 with lang_col2:
     st.session_state["app_lang"] = st.selectbox("🌐 Language / भाषा", ["English", "Hindi"], index=0 if st.session_state["app_lang"] == "English" else 1)
 
 TXT = LANG_DICT[st.session_state["app_lang"]]
 user_current_ip = get_user_ip()
+SECURITY_QUESTIONS = ["What is the name of your first school?", "What is your mother's maiden name?", "What was the name of your first pet?", "In which city or town were you born?"]
 
+# --- PHASE 1: LOGIN CONTROL ---
 if not st.session_state["logged_in"]:
     st.title(TXT["login_title"])
     st.markdown("---")
@@ -418,6 +428,7 @@ if not st.session_state["logged_in"]:
                     st.session_state["account_mode"] = mode
                     st.rerun()
                 else: st.error("Invalid credentials / अमान्य विवरण")
+                
         elif auth_choice == TXT["create_acc"]:
             st.subheader(TXT["reg_admin"])
             new_user = st.text_input(TXT["username"]).strip().lower()
@@ -432,6 +443,7 @@ if not st.session_state["logged_in"]:
                     success_reg, db_error_msg = add_user(new_user, new_password, selected_mode, "self")
                     if success_reg: st.success("Account created! Switch to Sign In / खाता निर्मित हुआ।")
                     else: st.error(f"❌ Rejection: {db_error_msg}")
+                    
         elif auth_choice == TXT["forget_pass"]:
             st.subheader(TXT["forget_pass"])
             reset_user = st.text_input(TXT["username"]).strip().lower()
@@ -493,7 +505,6 @@ member_list = get_sub_accounts(current_user)
 credit_given_types = ["Credit Given (To Receive)", "Credit Given (To Receive)", "उधार दिया (लेना है)"]
 credit_taken_types = ["Credit Taken (To Pay)", "Credit Taken (To Pay)", "उधार लिया (देना है)"]
 
-# PRINCE: Combined balance parsing loops fetching live network accounts safely
 combined_users_list = [current_user] + list(member_list)
 res_global_tx = supabase.table("transactions").select("type, amount, username, category").execute()
 
@@ -537,7 +548,6 @@ with main_tabs[0]:
     st.markdown(f"### {TXT['active_node_lbl']} **{view_target_user.upper()}**")
     
     if not df_target.empty and "amount" in df_target.columns:
-        # Secure placeholder row bypass logic if profile created token exists alone
         df_clean_target = df_target[df_target["type"] != "Credit Account Initialized"].copy()
         if not df_clean_target.empty:
             res_live_user = supabase.table("transactions").select("id, date, type, category, amount, payment_method, notes, log_status").eq("username", view_target_user).execute()
@@ -624,7 +634,7 @@ with main_tabs[1]:
             st.rerun()
 
 # ==========================================
-# TAB 3: LEDGER STATEMENT (PRINCE: RESTORED FULL EDIT/MEMBER ENGINE)
+# TAB 3: LEDGER STATEMENT
 # ==========================================
 with main_tabs[2]:
     st.markdown(TXT["cashbook_title"])
@@ -692,7 +702,7 @@ with main_tabs[2]:
     else: st.info("No Cash entries logged yet.")
 
 # ==========================================
-# TAB 4: CREDIT LEDGER (PRINCE: RESTORED FULL MEMBER VIEW ENGINE)
+# TAB 4: CREDIT LEDGER (UDHAAR KHATA)
 # ==========================================
 with main_tabs[3]:
     st.header(TXT["credit_title"])
