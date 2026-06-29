@@ -8,14 +8,18 @@ import streamlit.components.v1 as components
 from datetime import datetime, timedelta
 from supabase import create_client, Client
 
-# --- STREAMLIT INITIAL INITIALIZATION ---
+# --- STREAMLIT INITIAL INITIALIZATION (MUST BE BEFORE ANY CODES) ---
 st.set_page_config(page_title="Professional Ledger", layout="wide", page_icon="💰")
 
+# PRINCE: Variables register setting parameters initialized at top boundary safely
 if "logged_in" not in st.session_state: st.session_state["logged_in"] = False
 if "two_fa_verified" not in st.session_state: st.session_state["two_fa_verified"] = False
 if "username" not in st.session_state: st.session_state["username"] = ""
 if "account_mode" not in st.session_state: st.session_state["account_mode"] = "Single"
+if "trusted_ip_cache" not in st.session_state: st.session_state["trusted_ip_cache"] = None
 if "app_lang" not in st.session_state: st.session_state["app_lang"] = "English"
+
+# PRINCE: Mobile navigation active view index trigger parameter
 if "current_nav_tab" not in st.session_state: st.session_state["current_nav_tab"] = "Dashboard"
 
 # --- CLOUD DATABASE MASTER CONNECTION ---
@@ -234,11 +238,15 @@ st.markdown("""
     #MainMenu, .stAppDeployDropdown, button[title="View source code"] { display: none !important; }
     .stApp { padding-bottom: 90px !important; overscroll-behavior-y: contain !important; }
     div[data-testid="stConnectionStatus"] { display: none !important; }
+    [class^="viewerBadge_"], [class*="viewerBadge"], [data-testid="stViewerBadge"] { display: none !important; visibility: hidden !important; }
     [data-testid="stSkeleton"] { background-color: #ffffff !important; opacity: 0 !important; }
+    
+    /* PRINCE UI: Original layout tab headers hidden symmetrically */
     .stTabs [data-baseweb="tab-list"] { display: none !important; }
     </style>
 """, unsafe_allow_html=True)
 
+# --- PRINCE: TRANSLATION REGISTER ---
 LANG_DICT = {
     "English": {
         "title": "Welcome back,",
@@ -256,13 +264,17 @@ LANG_DICT = {
         "btn_register": "REGISTER NOW",
         "btn_login": "SIGN IN",
         "sec_config": "🛡️ INITIAL SECURITY CONFIGURATION",
-        "sec_q_lbl": "Choose a question:",
+        "sec_q_lbl": "Choose a question (For password recovery):",
         "sec_a_lbl": "Enter Your Answer:",
         "pin_lbl": "Create 6-Digit PIN:",
         "btn_save_sec": "SAVE SECURITY PROTOCOLS",
         "gateway_title": "🛡️ 2-STEP VERIFICATION GATEWAY",
         "pin_entry_lbl": "Enter Your 2-Step PIN:",
         "btn_verify_pin": "VERIFY SECURE PIN",
+        "tab_dash": "📱 Dashboard",
+        "tab_entry": "➕ Add Entry",
+        "tab_rec": "📋 Statements",
+        "tab_credit": "👥 Udhaar",
         "net_matrix_title": "🌐 Consolidated Network Balance",
         "total_rev": "🌍 TOTAL REVENUE",
         "total_out": "🛑 TOTAL OUTFLOW",
@@ -273,7 +285,7 @@ LANG_DICT = {
         "exp_drain": "🟥 EXPENSE DRAIN",
         "net_balance": "🟦 NET BALANCE",
         "exp_analysis": "📊 Expense Distribution Analysis",
-        "sys_control": "⚙️ Settings & Configuration Control",
+        "sys_control": "⚙️ System Control Center",
         "profile_sett": "👤 Account Profile Settings",
         "sec_check_lbl": "Verify Security Answer First:",
         "new_pass_lbl": "New Strong Password:",
@@ -296,12 +308,12 @@ LANG_DICT = {
         "cashbook_title": "### 🔍 General Cashbook Statements",
         "credit_title": "👥 Credit Accounts Directory (Udhaar)",
         "open_profile_exp": "➕ Open New Credit Account Profile",
-        "ent_acc_name": "Enter Account Name:",
+        "ent_acc_name": "Enter Account Name (e.g. Ramesh Kumar, Verma Kirana Store):",
         "btn_create_profile": "CREATE PROFILE ACCOUNT",
         "select_profile": "🎯 Select Credit Profile Account to Open:",
         "p_statement_title": "Account Statement:",
         "p_given": "🔴 Credit Given (To Receive)",
-        "p_taken": "🟢 Credit Taken (To Pay)",
+        "p_taken": "<span>🟢</span> Credit Taken (To Pay)",
         "p_due_us": "🚨 NET STATUS (Balance Due to Us)",
         "p_owe": "🤝 NET STATUS (Balance We Owe)",
         "p_settled": "✅ NET STATUS (Settled)",
@@ -323,7 +335,7 @@ LANG_DICT = {
         "create_acc": "नया खाता बनाएं",
         "forget_pass": "पासवर्ड भूल गए",
         "username": "उपयोगकर्ता नाम:",
-        "password": "पासवर्ड:",
+        "password": "पासवर्ड (गुप्त कोड):",
         "reg_admin": "मुख्य प्रबंधक पंजीकरण",
         "acc_mode": "खाता उपयोग का प्रकार:",
         "single_m": "एकल उपयोगकर्ता मोड",
@@ -331,13 +343,17 @@ LANG_DICT = {
         "btn_register": "अभी सुरक्षित पंजीकृत करें",
         "btn_login": "सफलतापूर्वक प्रवेश करें",
         "sec_config": "🛡️ प्रारंभिक सुरक्षा विन्यास",
-        "sec_q_lbl": "सुरक्षा प्रश्न चुनें:",
+        "sec_q_lbl": "सुरक्षा प्रश्न चुनें (पासवर्ड रिकवरी के लिए):",
         "sec_a_lbl": "अपना गुप्त उत्तर दर्ज करें:",
         "pin_lbl": "६-अंकों का सुरक्षा पिन बनाएं:",
         "btn_save_sec": "सुरक्षा नियम सुरक्षित करें",
         "gateway_title": "🛡️ द्वि-चरण सत्यापन सुरक्षा द्वार",
         "pin_entry_lbl": "अपना ६-अंकों का पिन दर्ज करें:",
         "btn_verify_pin": "पिन सत्यापित करें",
+        "tab_dash": "📱 डैशबोर्ड",
+        "tab_entry": "➕ एंट्री जोड़ें",
+        "tab_rec": "📋 विवरण",
+        "tab_credit": "👥 उधार खता",
         "net_matrix_title": "🌐 समेकित कुल पारिवारिक संतुलन",
         "total_rev": "🌍 कुल सकल आय",
         "total_out": "🛑 कुल सकल व्यय",
@@ -348,8 +364,8 @@ LANG_DICT = {
         "exp_drain": "🟥 कुल किया गया व्यय",
         "net_balance": "🟦 शुद्ध शेष राशि",
         "exp_analysis": "📊 व्यय वितरण विश्लेषणात्मक चार्ट",
-        "sys_control": "⚙️ विन्यास एवं नियंत्रण केंद्र Settings",
-        "profile_sett": "👤 व्यक्तिगत खाता विन्यास",
+        "sys_control": "### ⚙️ मुख्य प्रणाली नियंत्रण केंद्र",
+        "profile_sett": "👤 व्यक्तिगत खाता विन्यास settings",
         "sec_check_lbl": "पहले सुरक्षा प्रश्न का उत्तर सत्यापित करें:",
         "new_pass_lbl": "नया सुदृढ़ पासवर्ड:",
         "btn_commit_pass": "नया पासवर्ड लागू करें",
@@ -365,18 +381,18 @@ LANG_DICT = {
         "tx_type": "लेनदेन का प्रकार",
         "tx_method": "भुगतान की पद्धति",
         "tx_cat": "श्रेणी या विवरण का नाम",
-        "tx_amt": "धनराशि",
+        "tx_amt": "धनराशि (भारतीय रुपया)",
         "tx_desc": "विवरण या विशेष टिप्पणी",
         "btn_commit_tx": "वित्तीय रिकॉर्ड बहीखाता में दर्ज करें",
         "cashbook_title": "### 🔍 सामान्य नकद बहीखाता विवरण",
         "credit_title": "👥 ऋण खाता विवरण (उधार खता)",
         "open_profile_exp": "➕ नया व्यक्तिगत ऋण खाता प्रोफ़ाइल खोलें",
-        "ent_acc_name": "खाताधारक का पूरा नाम दर्ज करें:",
+        "ent_acc_name": "खाताधारक का पूरा नाम दर्ज करें (जैसे: रमेश कुमार, वर्मा किराना स्टोर):",
         "btn_create_profile": "नया ऋण खाता स्थापित करें",
         "select_profile": "🎯 विवरण देखने के लिए ऋण खाता प्रोफ़ाइल चुनें:",
         "p_statement_title": "व्यक्तिगत खाता विवरण:",
         "p_given": "🔴 दिया गया ऋण (हमें वापस लेना है)",
-        "p_taken": "🟢 लिया गया ऋण (हमें वापस देना है)",
+        "p_taken": "<span>🟢</span> लिया गया ऋण (हमें वापस देना है)",
         "p_due_us": "🚨 शुद्ध स्थिति (बाकी धनराशि जो हमें लेनी है)",
         "p_owe": "🤝 शुद्ध स्थिति (देय धनराशि जो हमें चुकानी है)",
         "p_settled": "✅ शुद्ध स्थिति (हिसाब बराबर)",
@@ -392,10 +408,10 @@ LANG_DICT = {
     }
 }
 
-# --- TOP LANGUAGE STRIP ---
+# --- TOP LANGUAGE TOGGLE STRIP ---
 lang_col1, lang_col2 = st.columns([8, 2])
 with lang_col2:
-    st.session_state["app_lang"] = st.selectbox("🌐 Bhasha", ["English", "Hindi"], index=0 if st.session_state["app_lang"] == "English" else 1)
+    st.session_state["app_lang"] = st.selectbox("🌐 Language / भाषा", ["English", "Hindi"], index=0 if st.session_state["app_lang"] == "English" else 1)
 
 TXT = LANG_DICT[st.session_state["app_lang"]]
 user_current_ip = get_user_ip()
@@ -420,15 +436,63 @@ if not st.session_state["logged_in"]:
                     st.session_state["account_mode"] = mode
                     st.rerun()
                 else: st.error("Invalid credentials / अमान्य विवरण")
+                
+        elif auth_choice == TXT["create_acc"]:
+            st.subheader(TXT["reg_admin"])
+            new_user = st.text_input(TXT["username"]).strip().lower()
+            new_password = st.text_input(TXT["password"], type="password")
+            mode_selection = st.selectbox(TXT["acc_mode"], [TXT["single_m"], TXT["multi_m"]])
+            selected_mode = "Single" if mode_selection == TXT["single_m"] else "Multiple"
+            if st.button(TXT["btn_register"], use_container_width=True):
+                is_strong, pass_msg = is_password_strong(new_password)
+                if not new_user or not new_password: st.error("Fields cannot be empty / रिक्त स्थान न छोड़ें")
+                elif not is_strong: st.error(pass_msg)
+                else:
+                    success_reg, db_error_msg = add_user(new_user, new_password, selected_mode, "self")
+                    if success_reg: st.success("Account created! Switch to Sign In / खाता निर्मित हुआ।")
+                    else: st.error(f"❌ Rejection: {db_error_msg}")
+                    
+        elif auth_choice == TXT["forget_pass"]:
+            st.subheader(TXT["forget_pass"])
+            reset_user = st.text_input(TXT["username"]).strip().lower()
+            if reset_user and user_exists(reset_user):
+                assigned_q = get_user_question(reset_user)
+                if assigned_q is None or assigned_q == "Not Set": st.error("Security not configured.")
+                else:
+                    st.info(f"Question: {assigned_q}")
+                    user_ans = st.text_input(TXT["sec_a_lbl"], type="password")
+                    st.markdown("---")
+                    new_reset_pass = st.text_input(TXT["new_pass_lbl"], type="password")
+                    if st.button("RESET PASSWORD", use_container_width=True):
+                        if verify_security_answer(reset_user, user_ans):
+                            update_user_password(reset_user, new_reset_pass)
+                            st.success("Success!")
+                        else: st.error("Incorrect!")
+    st.markdown("---")
     st.stop()
 
 current_user = st.session_state["username"]
 user_mode = st.session_state["account_mode"]
 
-# =======================================================
-# PRINCE VIP LAYOUT: CLOUD DATABASE IP VERIFICATION ENGINE (3 DAYS EXPIRE)
-# =======================================================
-# Check if current user has an active trusted IP whitelist inside Supabase Cloud
+if not check_user_security_setup(current_user):
+    st.title(TXT["sec_config"])
+    col_setup, _ = st.columns([1, 2])
+    with col_setup:
+        chosen_q = st.selectbox(TXT["sec_q_lbl"], SECURITY_QUESTIONS)
+        answer_q = st.text_input(TXT["sec_a_lbl"], type="password")
+        two_fa_code = st.text_input(TXT["pin_lbl"], type="password", max_chars=6)
+        if st.button(TXT["btn_save_sec"], use_container_width=True):
+            if not answer_q or not two_fa_code: st.error("Required!")
+            else:
+                save_security_setup(current_user, chosen_q, answer_q, two_fa_code)
+                st.session_state["two_fa_verified"] = True
+                st.session_state["trusted_ip_cache"] = user_current_ip
+                st.rerun()
+    st.stop()
+
+# =======================================================================================
+# PRINCE EXPERT FIX: CLOUD DATABASE PERMANENT IP MEMORY CAPTURE CORE ENGINE (IMAGE SYSTEM)
+# =======================================================================================
 if not st.session_state["two_fa_verified"]:
     res_ip_check = supabase.table("users").select("trusted_ip, ip_expiry").eq("username", current_user).execute()
     if res_ip_check.data:
@@ -439,7 +503,7 @@ if not st.session_state["two_fa_verified"]:
             try:
                 db_expiry = datetime.strptime(db_expiry_str, "%Y-%m-%d %H:%M:%S")
                 if datetime.now() < db_expiry:
-                    st.session_state["two_fa_verified"] = True # Pure Database Level Bypass Done!
+                    st.session_state["two_fa_verified"] = True # Whitelist pass granted automatically!
             except Exception:
                 pass
 
@@ -448,13 +512,13 @@ if not st.session_state["two_fa_verified"]:
     col_2fa, _ = st.columns([1, 2])
     with col_2fa:
         pin_entry = st.text_input(TXT["pin_entry_lbl"], type="password", max_chars=6)
-        trust_device = st.checkbox("Remember this device for 3 days", value=True)
+        trust_device = st.checkbox("Remember this device for 3 days", value=True) # Lock array state
         if st.button(TXT["btn_verify_pin"], use_container_width=True):
             res = supabase.table("users").select("two_fa_pin").eq("username", current_user).execute()
             if make_hashes(pin_entry) == res.data[0]["two_fa_pin"]:
                 st.session_state["two_fa_verified"] = True
                 
-                # PRINCE: Save trusted IP & Expiry Date directly into Supabase Permanent Cloud Server
+                # Cloud update payload lock trigger points
                 if trust_device:
                     expiry_date = (datetime.now() + timedelta(days=3)).strftime("%Y-%m-%d %H:%M:%S")
                     supabase.table("users").update({"trusted_ip": user_current_ip, "ip_expiry": expiry_date}).eq("username", current_user).execute()
@@ -463,7 +527,7 @@ if not st.session_state["two_fa_verified"]:
             else: st.error("Error!")
     st.stop()
 
-# --- MAIN ENGINE APP PANEL DATA FETCH ---
+# --- MAIN DATABASE PARSING INJECTOR ---
 member_list = get_sub_accounts(current_user)
 credit_given_types = ["Credit Given (To Receive)", "Credit Given (To Receive)", "उधार दिया (लेना है)"]
 credit_taken_types = ["Credit Taken (To Pay)", "Credit Taken (To Pay)", "उधार लिया (देना है)"]
@@ -481,7 +545,7 @@ if not df_global_filtered.empty:
     udhaar_net_balance = all_lena - all_dena
 
 # =======================================================
-# PRINCE VIP LAYOUT: TOP USER PROFILE HEADER WITH INLINE SETTINGS
+# PRINCE VIP LAYOUT: TOP USER PROFILE HEADER WITH SETTINGS ICON
 # =======================================================
 head_col1, head_col2 = st.columns([8, 2])
 with head_col1:
@@ -509,42 +573,42 @@ with head_col2:
                 to_delete = st.selectbox(TXT["select_del_mem"], member_list)
                 if st.button(TXT["btn_confirm_del_mem"], type="primary", use_container_width=True):
                     delete_user_account(to_delete)
-                    st.success("Erased!")
+                    st.success("Erased completely!")
                     st.rerun()
         st.markdown("---")
         if st.button(TXT["btn_signout"], use_container_width=True, type="primary"):
-            # Clear Database IP verification on explicit logout
             supabase.table("users").update({"trusted_ip": "None", "ip_expiry": "None"}).eq("username", current_user).execute()
             st.session_state["logged_in"] = False
             st.session_state["two_fa_verified"] = False
             st.session_state["trusted_ip_cache"] = None
             st.rerun()
 
-st.markdown("---")
+st.markdown("<br>", unsafe_allow_html=True)
 
 # =======================================================
-# PRINCE VIP LAYOUT: BOTTOM NAVIGATION BAR
+# PRINCE VIP LAYOUT: BOTTOM APP NAVIGATION CONTROLS (GRID ALIGNED MATCHING PIC)
 # =======================================================
 nav_col1, nav_col2, nav_col3, nav_col4 = st.columns(4)
 with nav_col1:
-    if st.button("📱 Dashboard", use_container_width=True, type="primary" if st.session_state["current_nav_tab"] == "Dashboard" else "secondary"):
+    if st.button(TXT["tab_dash"], use_container_width=True, type="primary" if st.session_state["current_nav_tab"] == "Dashboard" else "secondary"):
         st.session_state["current_nav_tab"] = "Dashboard"
         st.rerun()
 with nav_col2:
-    if st.button("➕ Add Entry", use_container_width=True, type="primary" if st.session_state["current_nav_tab"] == "Add Entry" else "secondary"):
+    if st.button(TXT["tab_entry"], use_container_width=True, type="primary" if st.session_state["current_nav_tab"] == "Add Entry" else "secondary"):
         st.session_state["current_nav_tab"] = "Add Entry"
         st.rerun()
 with nav_col3:
-    if st.button("📋 Statements", use_container_width=True, type="primary" if st.session_state["current_nav_tab"] == "Statements" else "secondary"):
+    if st.button(TXT["tab_rec"], use_container_width=True, type="primary" if st.session_state["current_nav_tab"] == "Statements" else "secondary"):
         st.session_state["current_nav_tab"] = "Statements"
         st.rerun()
 with nav_col4:
-    if st.button("👥 Udhaar", use_container_width=True, type="primary" if st.session_state["current_nav_tab"] == "Udhaar" else "secondary"):
+    if st.button(TXT["tab_credit"], use_container_width=True, type="primary" if st.session_state["current_nav_tab"] == "Udhaar" else "secondary"):
         st.session_state["current_nav_tab"] = "Udhaar"
         st.rerun()
 
 st.markdown("---")
 
+# --- NAVIGATION TABS RENDER MATRIX DISPATCHERS ---
 # ==========================================
 # CONDITION 1: DASHBOARD VIEW
 # ==========================================
@@ -560,9 +624,12 @@ if st.session_state["current_nav_tab"] == "Dashboard":
         st.markdown("---")
 
     view_target_user = current_user
+    is_viewing_self = True
     if user_mode == "Multiple" and member_list:
-        selected_view = st.selectbox("Select Account:", ["Personal Only"] + [m.upper() for m in member_list], key="view_selector_dashboard")
-        if selected_view != "Personal Only": view_target_user = selected_view.lower()
+        selected_view = st.selectbox("Select Account Node:", ["Personal Only"] + [m.upper() for m in member_list], key="view_selector_dashboard")
+        if selected_view != "Personal Only": 
+            view_target_user = selected_view.lower()
+            is_viewing_self = False
 
     df_target = df_global_mesh[df_global_mesh["username"] == view_target_user].copy() if not df_global_mesh.empty else pd.DataFrame()
     st.markdown(f"### {TXT['active_node_lbl']} **{view_target_user.upper()}**")
@@ -595,11 +662,11 @@ if st.session_state["current_nav_tab"] == "Dashboard":
             if not exp_df.empty:
                 cat_totals = exp_df.groupby("category")["amount"].sum().reset_index()
                 st.bar_chart(data=cat_totals, x="category", y="amount", color="#ff4b4b", use_container_width=True)
-        else: st.info("No logs entry registered yet.")
+        else: st.info("No logs entry registered inside this node layer yet.")
     else: st.info("No records inside this node yet.")
 
 # ==========================================
-# CONDITION 2: ADD ENTRY FORM VIEW
+# CONDITION 2: GENERAL ENTRY
 # ==========================================
 elif st.session_state["current_nav_tab"] == "Add Entry":
     st.markdown(TXT["log_tx_title"])
@@ -629,7 +696,7 @@ elif st.session_state["current_nav_tab"] == "Add Entry":
             st.rerun()
 
 # ==========================================
-# CONDITION 3: STATEMENTS VIEW
+# CONDITION 3: LEDGER STATEMENT
 # ==========================================
 elif st.session_state["current_nav_tab"] == "Statements":
     st.markdown(TXT["cashbook_title"])
@@ -637,7 +704,7 @@ elif st.session_state["current_nav_tab"] == "Statements":
     view_target_user_rec = current_user
     is_viewing_self_rec = True
     if user_mode == "Multiple" and member_list:
-        selected_view_rec = st.selectbox("Select Account to Audit:", ["My Personal Entries"] + [m.upper() for m in member_list], key="view_selector_records_tab")
+        selected_view_rec = st.selectbox("Select Target Node parameters to Audit:", ["My Personal Entries"] + [m.upper() for m in member_list], key="view_selector_records_tab")
         if selected_view_rec != "My Personal Entries":
             view_target_user_rec = selected_view_rec.lower()
             is_viewing_self_rec = False
@@ -683,12 +750,12 @@ elif st.session_state["current_nav_tab"] == "Statements":
                                     update_transaction(row['id'], row['date'].strftime('%Y-%m-%d'), edit_type, edit_cat.title(), edit_amt, edit_method, edit_notes, "Edited")
                                     st.session_state[f"show_edit_cash_{row['id']}"] = False
                                     st.rerun()
-                    else: st.markdown("<span style='color: #888; font-size: 0.85em;'>🔒 Read-Only</span>", unsafe_allow_html=True)
-        else: st.info("No records in this month.")
-    else: st.info("No entries logged yet.")
+                    else: st.markdown("<span style='color: #888; font-size: 0.85em;'>🔒 Read-Only Mode</span>", unsafe_allow_html=True)
+        else: st.info("No Cash records inside this timeframe layout node frame.")
+    else: st.info("No Cash entries logged yet.")
 
 # ==========================================
-# CONDITION 4: UDHAAR VIEW
+# CONDITION 4: CREDIT LEDGER (UDHAAR KHATA)
 # ==========================================
 elif st.session_state["current_nav_tab"] == "Udhaar":
     st.header(TXT["credit_title"])
@@ -704,7 +771,7 @@ elif st.session_state["current_nav_tab"] == "Udhaar":
     view_target_user_credit = current_user
     is_viewing_self_credit = True
     if user_mode == "Multiple" and member_list:
-        selected_view_credit = st.selectbox("Select Account Matrix:", ["My Personal Debts"] + [m.upper() for m in member_list], key="view_selector_credit_tab")
+        selected_view_credit = st.selectbox("Select Client Data Matrix Node to open:", ["My Personal Debts"] + [m.upper() for m in member_list], key="view_selector_credit_tab")
         if selected_view_credit != "My Personal Debts":
             view_target_user_credit = selected_view_credit.lower()
             is_viewing_self_credit = False
@@ -712,7 +779,7 @@ elif st.session_state["current_nav_tab"] == "Udhaar":
     df_user_credit_mesh = get_user_transactions(view_target_user_credit)
     all_profiles = sorted(df_user_credit_mesh[df_user_credit_mesh["type"] == "Credit Account Initialized"]["category"].unique()) if not df_user_credit_mesh.empty else []
         
-    if not all_profiles: st.info("No profiles found.")
+    if not all_profiles: st.info("No credit profile parameters found inside this matrix path link.")
     else:
         selected_person = st.selectbox(TXT["select_profile"], all_profiles)
         df_person_history = df_user_credit_mesh[df_user_credit_mesh["category"] == selected_person].copy()
@@ -722,11 +789,10 @@ elif st.session_state["current_nav_tab"] == "Udhaar":
         p_net_balance = p_given - p_taken
         
         st.markdown(f"### {TXT['p_statement_title']} **{selected_person.upper()}**")
-        
         if is_viewing_self_credit:
-            if st.button(TXT["btn_del_profile"], type="primary", use_container_width=True):
+            if st.button(TXT["btn_del_profile"], type="primary", use_container_width=True, key=f"del_profile_{selected_person}"):
                 delete_credit_profile_completely(current_user, selected_person)
-                st.toast("Profile Account erased!")
+                st.toast("Profile Account completely erased!")
                 st.rerun()
             st.markdown("---")
             
@@ -765,7 +831,18 @@ elif st.session_state["current_nav_tab"] == "Udhaar":
                 with st.expander(f"Date: {r_row['date']} | {log_tag} | **₹{r_row['amount']:,}**"):
                     st.markdown(f"*{r_row['notes']}*")
                     if is_viewing_self_credit:
-                        if st.button(TXT["btn_del"], key=f"del_p_{r_row['id']}", type="primary"):
+                        if st.button("🗑️ " + TXT["btn_del"], key=f"del_p_{r_row['id']}", type="primary"):
                             delete_transaction(r_row['id'])
                             st.toast("Removed!")
                             st.rerun()
+
+st.markdown("---")
+bot_col1, bot_col2 = st.columns(2)
+with bot_col1: st.info(f"📧 **{TXT['support_desk']} vermaji3216@gmail.com**")
+with bot_col2:
+    if st.button(TXT["btn_signout"], use_container_width=True, type="primary", key="signout_bottom"):
+        supabase.table("users").update({"trusted_ip": "None", "ip_expiry": "None"}).eq("username", current_user).execute()
+        st.session_state["logged_in"] = False
+        st.session_state["two_fa_verified"] = False
+        st.session_state["trusted_ip_cache"] = None
+        st.rerun()
